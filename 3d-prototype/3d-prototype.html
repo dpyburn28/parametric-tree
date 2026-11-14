@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Parametric tree growth (3D prototype)</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="styles.css">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+
+<body>
+    <a class="skip-link" href="#controls">Skip to controls</a>
+    <div class="top">
+        <!-- ? Main 3D Render -->
+        <div class="viewport">
+            <canvas id="c" role="img" aria-label="3D tree model" aria-describedby="canvasHelp"></canvas> <!-- ! WebGL Canvas -->
+            <canvas id="lassoOverlay" class="lasso-overlay" aria-hidden="true"></canvas>
+            <p id="canvasHelp" class="sr-only">Drag to orbit and scroll to zoom. Use prune or lasso mode to cut branches.</p>
+            <div class="legend" id="legend" hidden></div>
+            <div id="perfHud" class="perf-hud" hidden></div>
+            <span class="hint" aria-hidden="true">Drag to orbit · Scroll to zoom</span>
+        </div>
+        <div class="row">
+            <!-- ? Time Controls -->
+            <button class="p" id="play">Play</button> <!-- ! Play Button -->
+            <input type="range" id="time" min="0" max="301" step="0.01" value="0" aria-label="Age"> <!-- ! Time Bar -->
+            <button id="fullscreen" class="fullscreen-button" aria-pressed="false" aria-keyshortcuts="F" title="Fullscreen canvas (F)">Fullscreen</button>
+        </div>
+        <div class="stat">
+            <!-- ? Live Stats -->
+            <span id="stage">
+                <b>Seed</b>
+            </span>
+            <span id="st1"></span>
+        </div>
+        <canvas id="analytics" class="analytics" height="140" role="img" aria-label="Growth analytics"></canvas>
+    </div>
+    <div class="wrap" id="controls" tabindex="-1">
+        <!-- ? Species & Season Controls -->
+        <h2>Species &amp; season</h2>
+        <div class="preset-bar" id="presets">
+            <!-- ? Species Preset Buttons container -->
+        </div>
+        <div class="season-bar">
+            <label class="season-label">
+                Lifespan <span id="lifespanLabel">300 years</span>
+                <input type="range" id="lifespan" min="40" max="300" step="5" value="300">
+            </label>
+            <label class="season-label">
+                Season <span id="seasonLabel">Summer</span>
+                <input type="range" id="season" min="0" max="1" step="0.01" value="0.33">
+            </label>
+            <label class="season-auto">
+                <input type="checkbox" id="seasonAuto">
+                Follow phenology (4-year cycle)
+            </label>
+        </div>
+
+        <!-- ? Environment Controls -->
+        <h2>Environment</h2>
+        <div class="env-bar">
+            <label class="season-label">
+                Sun azimuth <span id="sunAzimuthLabel">0°</span>
+                <input type="range" id="sunAzimuth" min="0" max="360" step="1" value="0">
+            </label>
+            <label class="season-label">
+                Sun elevation <span id="sunElevationLabel">90°</span>
+                <input type="range" id="sunElevation" min="10" max="90" step="1" value="90">
+            </label>
+            <label class="season-label">
+                Wind <span id="windLabel">0.00</span>
+                <input type="range" id="wind" min="-0.5" max="0.5" step="0.01" value="0">
+            </label>
+            <label class="season-label">
+                Sway <span id="swayLabel">0.60</span>
+                <input type="range" id="sway" min="0" max="1.5" step="0.01" value="0.6">
+            </label>
+            <label class="season-auto">
+                <input type="checkbox" id="swayWind">
+                Scale sway with wind
+            </label>
+            <label class="viz-select">
+                Obstacle
+                <select id="obstacle">
+                    <option value="0">None</option>
+                    <option value="1">Wall</option>
+                    <option value="2">Boulder</option>
+                    <option value="3">Topiary sphere</option>
+                    <option value="4">Topiary cone</option>
+                    <option value="5">Hedge wall</option>
+                    <option value="6">Box / arch</option>
+                </select>
+            </label>
+            <label class="season-label">
+                Obstacle size <span id="obstacleLabel">60</span>
+                <input type="range" id="obstacleSize" min="20" max="150" step="5" value="60">
+            </label>
+            <label class="viz-select">
+                Trees
+                <select id="trees">
+                    <option value="1">1</option>
+                    <option value="3">3</option>
+                    <option value="5">5</option>
+                    <option value="7">7</option>
+                </select>
+            </label>
+            <label class="season-auto"><input type="checkbox" id="groundDetail" checked> Ground detail</label>
+            <label class="viz-select">Ground density
+                <select id="groundDensity">
+                    <option value="low">Low</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="high">High</option>
+                </select>
+            </label>
+        </div>
+
+        <details class="advanced-env">
+            <summary>Advanced environment</summary>
+            <div class="env-bar">
+                <label class="season-auto"><input type="checkbox" id="solarModel"> Solar model</label>
+                <label class="season-label">Latitude <span id="latitudeLabel">40°</span>
+                    <input type="range" id="latitude" min="-60" max="60" step="1" value="40">
+                </label>
+                <label class="season-label">Day <span id="dayLabel">172</span>
+                    <input type="range" id="dayOfYear" min="1" max="365" step="1" value="172">
+                </label>
+                <label class="season-label">Hour <span id="hourLabel">12.0</span>
+                    <input type="range" id="hour" min="0" max="24" step="0.5" value="12">
+                </label>
+                <label class="viz-select">Sky
+                    <select id="skyPreset">
+                        <option value="clear">Clear</option>
+                        <option value="golden">Golden hour</option>
+                        <option value="overcast">Overcast</option>
+                        <option value="winter">Winter</option>
+                    </select>
+                </label>
+                <label class="viz-select">Sun samples
+                    <select id="sunSamples">
+                        <option value="1">1</option>
+                        <option value="3" selected>3</option>
+                        <option value="5">5</option>
+                    </select>
+                </label>
+                <label class="season-label">Wind direction <span id="windDirLabel">0°</span>
+                    <input type="range" id="windDirection" min="0" max="360" step="5" value="0">
+                </label>
+                <label class="season-label">Gust <span id="gustLabel">0.18</span>
+                    <input type="range" id="gustAmp" min="0" max="1" step="0.01" value="0.18">
+                </label>
+                <label class="viz-select">Species mix
+                    <select id="speciesMix">
+                        <option value="current">Current preset</option>
+                        <option value="auto">Auto mix</option>
+                        <option value="oak">Oak</option>
+                        <option value="pine">Pine</option>
+                        <option value="willow">Willow</option>
+                        <option value="cherry">Cherry</option>
+                        <option value="poplar">Poplar</option>
+                    </select>
+                </label>
+                <label class="season-label">Spacing <span id="spacingLabel">200</span>
+                    <input type="range" id="spacing" min="80" max="360" step="10" value="200">
+                </label>
+                <label class="season-label">Age mix <span id="ageMixLabel">0.00</span>
+                    <input type="range" id="ageMix" min="0" max="1" step="0.01" value="0">
+                </label>
+                <label class="season-label">Crown shyness <span id="crownShyLabel">0.20</span>
+                    <input type="range" id="crownShyness" min="0" max="1" step="0.01" value="0.2">
+                </label>
+                <label class="season-label">Slope <span id="slopeLabel">0°</span>
+                    <input type="range" id="slope" min="0" max="35" step="1" value="0">
+                </label>
+                <label class="season-label">Aspect <span id="aspectLabel">0°</span>
+                    <input type="range" id="aspect" min="0" max="360" step="5" value="0">
+                </label>
+                <label class="season-label">Soil moisture <span id="soilLabel">0.60</span>
+                    <input type="range" id="soilMoisture" min="0" max="1" step="0.01" value="0.6">
+                </label>
+                <label class="season-label">Exposure <span id="exposureLabel">1.00</span>
+                    <input type="range" id="exposure" min="0.5" max="1.5" step="0.05" value="1">
+                </label>
+                <label class="season-label">Fog <span id="fogLabel">0.0008</span>
+                    <input type="range" id="fogDensity" min="0" max="0.003" step="0.0001" value="0.0008">
+                </label>
+                <label class="season-auto"><input type="checkbox" id="snow"> Snowfall</label>
+                <label class="season-auto"><input type="checkbox" id="espalier"> Espalier plane</label>
+                <label class="season-auto"><input type="checkbox" id="bloom"> Bloom</label>
+                <label class="season-auto"><input type="checkbox" id="reducedMotion"> Reduce motion</label>
+                <label class="viz-select">Quality
+                    <select id="quality">
+                        <option value="auto">Auto</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                </label>
+            </div>
+        </details>
+
+        <!-- ? Parameter Controls -->
+        <h2>Growth parameters</h2>
+        <div class="grid" id="params">
+            <!-- ? Growth Parameters container -->
+        </div>
+        <div class="row" style="flex-wrap:wrap">
+            <!-- ? Seed/Reset Controls -->
+            <button id="reseed">New seed</button> <!-- ! Reseed Button -->
+            <button id="reset">Reset</button> <!-- ! Reset Button -->
+            <button id="prune">Prune</button> <!-- ! Prune Mode -->
+            <button id="lasso">Lasso</button> <!-- ! Lasso Prune -->
+            <label class="viz-select" style="margin:0">
+                Cut
+                <select id="pruneType">
+                    <option value="thinning">Thinning</option>
+                    <option value="heading">Heading</option>
+                    <option value="pollard">Pollard</option>
+                </select>
+            </label>
+            <button id="clearCuts">Clear cuts</button> <!-- ! Clear Prunes -->
+            <button id="undoCut">Undo cut</button> <!-- ! Undo Prune -->
+            <button id="redoCut">Redo cut</button> <!-- ! Redo Prune -->
+            <button id="isolate">Isolate selected</button> <!-- ! Isolate Branch -->
+            <button id="snapshot">Snapshot</button> <!-- ! Before Snapshot -->
+            <button id="compare">Compare</button> <!-- ! Compare Ghost -->
+            <button id="exportGlb">Export GLB</button> <!-- ! GLB Export -->
+            <button id="exportCsv">Export CSV</button> <!-- ! Analytics CSV -->
+            <button id="saveState">Save state</button>
+            <button id="loadState">Load state</button>
+            <input type="file" id="loadStateFile" accept="application/json" hidden>
+            <button id="shareState">Copy link</button>
+            <button id="exportPng">Export PNG</button>
+            <button id="exportJson">Export JSON</button>
+            <label style="display:flex;gap:6px;align-items:center">
+                <!-- ? Auto-Zoom Toggle -->
+                <input type="checkbox" id="zoom" checked style="width:auto;margin:0">
+                Auto-zoom
+            </label>
+            <label style="display:flex;gap:6px;align-items:center">
+                <!-- ? Turntable Spin Toggle -->
+                <input type="checkbox" id="spin" checked style="width:auto;margin:0">
+                Turntable
+            </label>
+            <span id="seedv" style="color:var(--mut);font-size:13px"></span> <!-- ! Seed Display -->
+        </div>
+
+        <details class="advanced-env">
+            <summary>Export options</summary>
+            <div class="env-bar">
+                <label class="season-auto"><input type="checkbox" id="glbRoots" checked> GLB roots</label>
+                <label class="season-auto"><input type="checkbox" id="glbLeaves" checked> GLB leaves/flowers</label>
+                <label class="season-auto"><input type="checkbox" id="glbMetadata" checked> GLB metadata</label>
+                <label class="viz-select">Axis
+                    <select id="glbAxis">
+                        <option value="y">Y-up</option>
+                        <option value="z">Z-up</option>
+                    </select>
+                </label>
+                <label class="viz-select">Units
+                    <select id="glbUnits">
+                        <option value="m" selected>metres</option>
+                        <option value="cm">centimetres</option>
+                    </select>
+                </label>
+                <label class="viz-select">PNG scale
+                    <select id="pngScale">
+                        <option value="1">1×</option>
+                        <option value="2" selected>2×</option>
+                        <option value="4">4×</option>
+                    </select>
+                </label>
+                <label class="viz-select">GLB detail
+                    <select id="glbLod">
+                        <option value="near" selected>Full</option>
+                        <option value="mid">Light</option>
+                        <option value="far">Silhouette</option>
+                    </select>
+                </label>
+                <button id="exportBatch">Export batch ZIP</button>
+            </div>
+        </details>
+
+        <details class="advanced-env">
+            <summary>Analytics comparison</summary>
+            <div class="env-bar">
+                <button id="analyticsPin">Pin baseline</button>
+                <button id="analyticsCompare" aria-pressed="false" disabled>Compare</button>
+                <button id="analyticsClear" disabled>Clear</button>
+                <span id="analyticsBaselineLabel" class="analytics-baseline-label">No baseline</span>
+            </div>
+            <p id="analyticsSummary" class="analytics-summary">Pin a run to compare metrics.</p>
+        </details>
+
+        <details class="advanced-env">
+            <summary>Keyboard help</summary>
+            <ul>
+                <li><b>Cmd/Ctrl+Z</b> — undo cut</li>
+                <li><b>Cmd/Ctrl+Shift+Z</b> or <b>Ctrl+Y</b> — redo cut</li>
+                <li><b>Prune mode</b> — click to cut; hover to preview the subtree</li>
+                <li><b>P</b> — prune mode</li>
+                <li><b>L</b> — lasso mode</li>
+                <li><b>I</b> — isolate selected branch</li>
+                <li><b>Space</b> — play / pause</li>
+                <li><b>R</b> — restart timeline</li>
+                <li><b>H</b> — hide/show UI in fullscreen</li>
+                <li><b>F</b> — fullscreen canvas</li>
+                <li><b>Esc</b> — exit fullscreen / clear lasso / isolation / compare</li>
+            </ul>
+        </details>
+
+        <h2>Algorithm visualizations</h2>
+        <div class="viz-bar">
+            <label class="viz-select">
+                Bark color mode
+                <select id="vizColor">
+                    <option value="natural">Natural bark</option>
+                    <option value="order">Branch order (0–4)</option>
+                    <option value="light">Light level (0–1)</option>
+                    <option value="vigor">Vigor (apical dominance)</option>
+                    <option value="pipe">Pipe model vs. Age floor</option>
+                </select>
+            </label>
+            <div class="viz-checks">
+                <label><input type="checkbox" id="vizSkeleton"> Skeleton &amp; nodes</label>
+                <label><input type="checkbox" id="vizLight"> Light voxels</label>
+                <label><input type="checkbox" id="vizVectors"> Tropism vectors</label>
+                <label><input type="checkbox" id="vizShed"> Shed branches (ghosts)</label>
+                <label><input type="checkbox" id="vizWire"> Branch wireframe</label>
+                <label><input type="checkbox" id="vizPerf"> Performance HUD</label>
+                <label><input type="checkbox" id="vizXray"> X-ray (dim bark &amp; leaves)</label>
+            </div>
+        </div>
+
+        <h2>Node inspector</h2>
+        <div id="inspector" class="inspector">Click the tree to inspect a node.</div>
+
+        <h2>How it works (3D)</h2>
+        <ul>
+            <li>The tree is simulated once, year by year, as a 3D skeleton of nodes. Each node records its birth and death time.</li>
+            <li>Every year, active buds extend in 3D space, steered by random 3D jitter, phototropism (+Y up) and gravity droop (-Y down).</li>
+            <li>Lateral buds roll around their parent shoot axis by the <b>golden angle (~137.5°)</b> and tilt out by the branch angle, with reduced vigor (apical dominance).</li>
+            <li>A 3D voxel light model counts shading nodes above each shoot to slow, cull, and shed shaded lower branches so the crown lifts naturally.</li>
+            <li>Time is only a render parameter: Three.js rebuilds a single tapered-cylinder mesh using pipe-model radii and updates an instanced leaf mesh every frame.</li>
+        </ul>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <button id="fullscreenExit" class="fullscreen-exit" aria-label="Exit fullscreen">Exit fullscreen</button>
+    <span id="fullscreenHint" class="fullscreen-hint">Space play/pause · R restart · H hide UI · Esc exit</span>
+    <script src="../shared/params.js"></script>
+    <script src="../shared/presets.js"></script>
+    <script src="../shared/grammar.js"></script>
+    <script src="../shared/environment.js"></script>
+    <script src="../shared/state.js"></script>
+    <script src="../shared/zip.js"></script>
+    <script type="module" src="main.js"></script>
+</body>
+
+</html>

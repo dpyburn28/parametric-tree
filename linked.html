@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Parametric tree — 2D / 3D split studio</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="linked.css">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+
+<body class="booting panel-open">
+    <a class="skip-link" href="#appSplit">Skip to canvases</a>
+    <header class="app-header">
+        <div class="brand">
+            <h1>Parametric tree</h1>
+            <p>2D / 3D split studio</p>
+        </div>
+        <div class="transport" role="group" aria-label="Shared playback controls">
+            <button id="play" class="transport-button">Play</button>
+            <label class="transport-control">
+                Age <span id="timeLabel">0.0</span>
+                <input id="time" type="range" min="0" max="301" step="0.01" value="0" aria-label="Age">
+            </label>
+            <div class="pane-switch" role="group" aria-label="Active view">
+                <button id="pane2d" class="pane-switch-button" aria-pressed="true" aria-keyshortcuts="1">2D</button>
+                <button id="pane3d" class="pane-switch-button" aria-pressed="false" aria-keyshortcuts="2">3D</button>
+            </div>
+            <span id="activeView" class="active-view" aria-live="polite">Active: 2D</span>
+            <button id="fullscreen" class="transport-button" aria-pressed="false" title="Expand the active canvas (F)">Fullscreen</button>
+            <button id="togglePanel" class="transport-button" aria-expanded="true" aria-controls="controlPanel">Hide controls</button>
+            <button id="copyLink" class="transport-button" aria-label="Copy a share link to this tree">Copy link</button>
+        </div>
+        <div class="app-meta">
+            <span id="status" class="app-status" role="status" aria-live="polite">Loading views…</span>
+            <span class="standalone-links">
+                <a href="prototype/2d-prototype.html">2D only</a>
+                <a href="3d-prototype/3d-prototype.html">3D only</a>
+            </span>
+        </div>
+    </header>
+
+    <main class="app-split" id="appSplit" tabindex="-1">
+        <section class="app-pane active" data-view="2d" aria-label="2D view">
+            <header class="pane-head">
+                <span class="pane-title">2D silhouette</span>
+                <span class="pane-active">Active</span>
+            </header>
+            <div id="view2d" class="view-host"></div>
+        </section>
+        <section class="app-pane" data-view="3d" aria-label="3D view">
+            <header class="pane-head">
+                <span class="pane-title">3D form</span>
+                <span class="pane-active">Active</span>
+            </header>
+            <div id="view3d" class="view-host"></div>
+        </section>
+    </main>
+
+    <div id="panelBackdrop" class="panel-backdrop" hidden></div>
+    <aside id="controlPanel" class="control-panel" aria-labelledby="panelTitle" tabindex="-1">
+        <header class="panel-head">
+            <div>
+                <strong id="panelTitle">Controls</strong>
+                <span>Both views share one state</span>
+            </div>
+            <button id="panelClose" class="panel-close" aria-label="Close controls">×</button>
+        </header>
+        <div id="controlHost" class="control-host"></div>
+    </aside>
+
+    <button id="fullscreenExit" class="fullscreen-exit" aria-label="Exit fullscreen">Exit fullscreen</button>
+    <span id="fullscreenHint" class="fullscreen-hint">Space play/pause · R restart · H hide UI · Esc exit</span>
+
+    <script src="shared/params.js"></script>
+    <script src="shared/presets.js"></script>
+    <script src="shared/grammar.js"></script>
+    <script src="shared/environment.js"></script>
+    <script src="shared/state.js"></script>
+    <script src="shared/zip.js"></script>
+    <script type="module" src="linked.js"></script>
+</body>
+
+</html>
