@@ -6,7 +6,7 @@ This checklist covers the split studio and the standalone 2D/3D debug pages. Ser
 
 ```sh
 python3 -m http.server 8000
-# open http://127.0.0.1:8000/linked.html
+# open http://127.0.0.1:8000/index.html
 ```
 
 ## Automated validation
@@ -30,7 +30,7 @@ node tests/visual-regression.js --update
 
 ## Manual smoke checks
 
-- [ ] `linked.html` boots both panes without iframes or console errors.
+- [ ] `index.html` boots both panes without iframes or console errors.
 - [ ] The four-mode rail switches Grow / Sculpt / Study / Deliver; clicking the active mode collapses the flyout.
 - [ ] Every control carries a scope chip and inline help popover; no control appears twice.
 - [ ] Layout `Split` / `2D` / `3D` changes visibility only; clicking a pane or pressing `1` / `2` sets the acting view.

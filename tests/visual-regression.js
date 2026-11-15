@@ -326,7 +326,7 @@ async function capture(dimension, testCase) {
 }
 
 async function captureStudio(testCase) {
-    const page = `http://127.0.0.1:${SERVER_PORT}/linked.html?test=1`;
+    const page = `http://127.0.0.1:${SERVER_PORT}/index.html?test=1`;
     const res = await fetch(`http://127.0.0.1:${CDP_PORT}/json/new?${encodeURIComponent(page)}`, { method: 'PUT' });
     const target = await res.json();
     const session = await CdpSession.open(target);

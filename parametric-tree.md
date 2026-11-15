@@ -929,7 +929,7 @@ These items are intentionally not blocking Phase 8. Revisit them after the produ
 | Per-step `currentLight` / leaf-light history | Current analytics uses a documented final-canopy approximation | When analytics comparison becomes a priority |
 | SSAO and color grading | Optional bloom exists; SSAO/grading were deferred for performance risk | When atmosphere polish is requested |
 | Full flower/fruit instancing and leaf-cluster phyllotaxis | Current fruit/flower cards and species leaf counts are first-pass | Post-Phase 8 fidelity pass |
-| Split side-by-side 2D/3D studio | Implemented in `linked.html` without iframes: module-scoped engines, shadow-root renderers, one universal control rail, active-pane actions, and an in-page state bus | Done |
+| Split side-by-side 2D/3D studio | Implemented in `index.html` without iframes: module-scoped engines, shadow-root renderers, one universal control rail, active-pane actions, and an in-page state bus | Done |
 | Analytics comparison mode and chart-to-tree linking | Metrics and CSV/JSON exist; comparison UI does not | Phase 8 follow-up |
 | Prune espalier, multi-select/lasso, isolate/before-after | Lasso, isolate, ghost compare, espalier plane, and shortcuts implemented | Done |
 | Batch export, SVG dimensions/DPI/annotations | Single-export options exist | Phase 8 follow-up |

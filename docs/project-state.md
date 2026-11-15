@@ -2,7 +2,7 @@
 
 **Snapshot:** 2026-11-14
 **Status:** Stage + dock UI/UX redesign implemented; validation passing
-**Primary entry point:** `linked.html` — the 2D/3D split studio  
+**Primary entry point:** `index.html` — the 2D/3D split studio  
 **Standalone debug pages:** `prototype/2d-prototype.html`, `3d-prototype/3d-prototype.html`
 
 > **How to use this document**
@@ -295,7 +295,7 @@ The 7-tree/300-year case is guarded at < 3 s. Simulation is synchronous on the m
 
 ```sh
 python3 -m http.server 8000
-# open http://127.0.0.1:8000/linked.html
+# open http://127.0.0.1:8000/index.html
 ```
 
 The studio fetches pane templates and shared modules. The standalone 2D page is dependency-light; the 3D page requires HTTP and the Three.js CDN. The current workspace is not a git repository; there are no commits or branches to inspect, only the files on disk. Automated validation covers `phase5`–`phase9`, `app-ui`, and visual regression; `docs/release-checklist.md` also contains optional manual smoke checks.
@@ -330,7 +330,7 @@ The studio fetches pane templates and shared modules. The standalone 2D page is 
 
 There are three visible surfaces:
 
-1. **Split studio** — `linked.html`. Primary product surface.
+1. **Split studio** — `index.html`. Primary product surface.
 2. **Standalone 2D** — `prototype/2d-prototype.html`. Debug/reference page.
 3. **Standalone 3D** — `3d-prototype/3d-prototype.html`. Debug/reference page.
 
@@ -1321,7 +1321,7 @@ These are intentionally unresolved. The redesign should make a recommendation, n
 
 | Path | Role |
 |---|---|
-| `linked.html` | Studio shell, header, mode rail, flyout, stage panes, transport dock, Study drawer, dialogs and record stage |
+| `index.html` | Studio shell, header, mode rail, flyout, stage panes, transport dock, Study drawer, dialogs and record stage |
 | `linked.css` | Studio tokens, shell, stage, dock, dialogs, fullscreen, record stage |
 | `studio.css` | Mode rail, flyout chrome, stage tools, Study drawer, record chrome, responsive sheet |
 | `linked.js` | Studio controller, manifest mount/sync, modes, layout, transport, Study chart, palette, record controller and mobile sheet |

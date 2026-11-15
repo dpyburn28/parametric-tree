@@ -160,7 +160,7 @@ async function main() {
 
     const server = await startServer();
     const { proc, userDataDir } = await launchChrome();
-    const page = `http://127.0.0.1:${SERVER_PORT}/linked.html?test=1`;
+    const page = `http://127.0.0.1:${SERVER_PORT}/index.html?test=1`;
     const target = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/new?${encodeURIComponent(page)}`, { method: 'PUT' })).json();
     const session = await CdpSession.open(target);
 
