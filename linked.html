@@ -33,6 +33,7 @@
                     <div id="projectMenuSlot" class="project-slot" data-slot="project-menu"></div>
                     <button id="projectCopy" class="menu-item" type="button" role="menuitem">Copy link</button>
                     <button id="projectPreferences" class="menu-item" type="button" role="menuitem">Preferences…</button>
+                    <button id="projectReset" class="menu-item menu-item-danger" type="button" role="menuitem">Reset app state…</button>
                     <a class="menu-item" role="menuitem" href="prototype/2d-prototype.html">Open standalone 2D</a>
                     <a class="menu-item" role="menuitem" href="3d-prototype/3d-prototype.html">Open standalone 3D</a>
                     <button id="projectShortcuts" class="menu-item" type="button" role="menuitem">Keyboard shortcuts</button>
@@ -311,6 +312,19 @@
         <div class="help-explainer">
             <h3>How it works</h3>
             <p>The tree is simulated once as a skeleton of nodes. Time is a render parameter, so scrubbing never re-runs the simulation. Every random choice comes from a hash of the seed, bud, step and channel, so the same settings reproduce the same tree. Cuts are stored as stable <code>budId:birthStep</code> keys; pruning re-simulates light so nearby branches can respond. The 2D silhouette and 3D form share a seed, parameters, cuts and time, but use separate simulation and render engines.</p>
+        </div>
+    </div>
+
+    <div id="resetDialog" class="dialog reset-dialog" role="dialog" aria-modal="true"
+        aria-labelledby="resetTitle" hidden>
+        <header class="dialog-head">
+            <h2 id="resetTitle">Reset app state?</h2>
+            <button type="button" class="icon-button" data-close-dialog="resetDialog" aria-label="Close">×</button>
+        </header>
+        <p class="dialog-note">This clears both views, cuts, the saved session, mode/layout, Record settings and view options. Onboarding will not replay. This cannot be undone.</p>
+        <div class="reset-actions">
+            <button id="resetCancel" type="button" class="quiet-button">Cancel</button>
+            <button id="resetConfirm" type="button" class="destructive-button">Reset app</button>
         </div>
     </div>
 

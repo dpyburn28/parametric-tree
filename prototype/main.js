@@ -82,6 +82,7 @@ let isolateNode = -1;
 let compareSnapshot = null;
 let compareMode = false;
 let selectedNode = -1;
+let selectionEnabled = true;
 let hoverNode = -1;
 let hoverSubtree = null;
 let hoverSubtreeFor = -1;
@@ -1606,6 +1607,17 @@ function selectNode(index) {
     draw();
 }
 
+/** Clear the inspected node and any isolation tied to it. */
+function clearSelection() {
+    const hadSelection = selectedNode >= 0 || isolateNode >= 0;
+    selectedNode = -1;
+    isolateNode = -1;
+    const el = $('inspector');
+    if (el) el.textContent = 'Click the tree to inspect a node.';
+    clearHover();
+    if (hadSelection) draw();
+}
+
 function pointInPolygon(x, y, poly) {
     let inside = false;
     for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -1725,7 +1737,9 @@ function handleCanvasClick(e) {
     if (!lastCamera || lassoMode) return;
     const best = pickNearestNode(e);
     if (!pruneMode) {
+        if (!selectionEnabled) return;
         if (best >= 0) selectNode(best);
+        else clearSelection();
         return;
     }
     if (best < 0) return;
@@ -2094,6 +2108,10 @@ function postLinkedPatch(patch) {
 
 function restoreAppState(state, options = {}) {
     if (!state) return;
+    const previousSelection = selectedNode >= 0 ? nodes[selectedNode] : null;
+    const previousSelectionId = previousSelection
+        ? `${previousSelection.budId}:${previousSelection.birthStep}`
+        : null;
     if (state.dimension && state.dimension !== DIMENSION && !LINKED_MODE) {
         const url = new URL(window.location.href);
         url.searchParams.set('state', encodeTreeState(state));
@@ -2143,6 +2161,11 @@ function restoreAppState(state, options = {}) {
     setActivePreset(activePreset);
     $('seedv').textContent = 'seed ' + seed;
     regenerate();
+    if (options.preserveSelection && previousSelectionId && selectionEnabled) {
+        const restoredIndex = nodes.findIndex((node) => `${node.budId}:${node.birthStep}` === previousSelectionId);
+        if (restoredIndex >= 0) selectNode(restoredIndex);
+        else clearSelection();
+    }
     if (!options.skipAutosave) scheduleStateAutosave();
 }
 
@@ -2520,7 +2543,7 @@ function bindLinkedMode() {
         if (!data || typeof data !== 'object') return;
         if (data.type === 'tree-apply-state' && data.state) {
             applyingRemote = true;
-            restoreAppState(data.state, { skipAutosave: true });
+            restoreAppState(data.state, { skipAutosave: true, preserveSelection: true });
             applyingRemote = false;
         } else if (data.type === 'tree-patch' && data.patch) {
             applyingRemote = true;
@@ -2836,6 +2859,7 @@ function bindControls() {
             isolateNode = -1;
             compareMode = false;
             clearHover();
+            clearSelection();
             draw();
         }
     });
@@ -2898,6 +2922,12 @@ window.__tree2d = {
     },
     resize() { resizeCanvas(); },
     get selectedNode() { return selectedNode; },
+    get selectionEnabled() { return selectionEnabled; },
+    clearSelection,
+    setSelectionEnabled(enabled) {
+        selectionEnabled = !!enabled;
+        if (!selectionEnabled) clearSelection();
+    },
     /** Screen position of a node inside the pane canvas, for the anchored inspector. */
     nodeScreenPosition(index = selectedNode) {
         if (index < 0 || !lastCamera || !frame.present[index]) return null;

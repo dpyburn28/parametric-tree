@@ -324,9 +324,9 @@ export const MANIFEST = [
     { key: 'loadStateFile', kind: 'id', id: 'loadStateFile', label: 'Load state file', mode: 'project', group: ['Project'], level: 'expert', scope: 'active', order: 1002, mount: 'project-menu', hidden: true },
 
     /* ---- Pane view menus ---------------------------------------------- */
-    C('zoom', 'Auto-zoom', 'stage', ['View'], 'essential', 'both', 1100, {
+    C('zoom', 'Auto-zoom (2D)', 'stage', ['View'], 'essential', '2d', 1100, {
         mount: 'view-2d',
-        help: 'Fit the visible tree in both views as time changes.',
+        help: 'Fit the visible 2D tree in the pane as time changes.',
     }),
     C('spin', 'Turntable', 'stage', ['View'], 'essential', '3d', 1101, {
         mount: 'view-3d',

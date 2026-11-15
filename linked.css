@@ -301,6 +301,15 @@ kbd {
     color: var(--accent-ink);
 }
 
+.menu-item-danger {
+    color: var(--danger);
+}
+
+.menu-item-danger:hover {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
 .menu-note {
     margin-top: 4px;
     padding: 7px 10px;
@@ -1162,6 +1171,13 @@ body.canvas-ui-hidden .transport-dock {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+}
+
+.reset-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 14px;
 }
 
 /* ---- Utility ----------------------------------------------------------- */

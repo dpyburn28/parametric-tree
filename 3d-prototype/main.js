@@ -101,6 +101,7 @@ let isolateNode = -1;
 let compareSnapshot = null;
 let compareMode = false;
 let selectedNode = -1;
+let selectionEnabled = true;
 let hoverNode = -1;
 let hoverSubtree = null;
 let hoverSubtreeFor = -1;
@@ -3837,6 +3838,21 @@ function selectNode(index) {
     updateSelectionMesh();
 }
 
+/** Clear the inspected node and any isolation tied to it. */
+function clearSelection() {
+    const hadSelection = selectedNode >= 0 || isolateNode >= 0;
+    selectedNode = -1;
+    isolateNode = -1;
+    const el = $('inspector');
+    if (el) el.textContent = 'Click the tree to inspect a node.';
+    clearHover();
+    if (hadSelection) {
+        updateSelectionMesh();
+        updateIsolation();
+        updateSceneFromTime(false);
+    }
+}
+
 /** Prune the node's whole subtree by its stable bud/step identity. */
 function pruneNodeAt(index) {
     const node = nodes[index];
@@ -4339,6 +4355,10 @@ function postLinkedPatch(patch) {
 
 function restoreAppState(state, options = {}) {
     if (!state) return;
+    const previousSelection = selectedNode >= 0 ? nodes[selectedNode] : null;
+    const previousSelectionId = previousSelection
+        ? `${previousSelection.budId}:${previousSelection.birthStep}`
+        : null;
     if (state.dimension && state.dimension !== DIMENSION && !LINKED_MODE) {
         const url = new URL(window.location.href);
         url.searchParams.set('state', encodeTreeState(state));
@@ -4401,10 +4421,15 @@ function restoreAppState(state, options = {}) {
     $('seedv').textContent = 'seed ' + seed;
     regenerate();
     if (state.camera && state.camera.position && state.camera.target) {
-        if ($('zoom')) $('zoom').checked = false;
+        if (!LINKED_MODE && $('zoom')) $('zoom').checked = false;
         camera.position.set(...state.camera.position);
         controls.target.set(...state.camera.target);
         controls.update();
+    }
+    if (options.preserveSelection && previousSelectionId && selectionEnabled) {
+        const restoredIndex = nodes.findIndex((node) => `${node.budId}:${node.birthStep}` === previousSelectionId);
+        if (restoredIndex >= 0) selectNode(restoredIndex);
+        else clearSelection();
     }
     if (!options.skipAutosave) scheduleStateAutosave();
 }
@@ -4479,7 +4504,7 @@ function bindLinkedMode() {
         if (!data || typeof data !== 'object') return;
         if (data.type === 'tree-apply-state' && data.state) {
             applyingRemote = true;
-            restoreAppState(data.state, { skipAutosave: true });
+            restoreAppState(data.state, { skipAutosave: true, preserveSelection: true });
             applyingRemote = false;
         } else if (data.type === 'tree-patch' && data.patch) {
             applyingRemote = true;
@@ -4655,9 +4680,10 @@ function bindControls() {
         if (moved >= 5) return;
         if (pruneMode) {
             handleCanvasPrune(e);
-        } else {
+        } else if (selectionEnabled) {
             const index = pickNodeAt(e);
             if (index >= 0) selectNode(index);
+            else clearSelection();
         }
     });
     canvas.addEventListener('pointercancel', () => { pointerDownPos = null; });
@@ -4864,6 +4890,7 @@ function bindControls() {
             compareMode = false;
             compareLines.visible = false;
             clearHover();
+            clearSelection();
             updateIsolation();
             updateSceneFromTime(false);
         }
@@ -4943,6 +4970,12 @@ window.__tree3d = {
         return Array.from(g.getImageData(0, 0, width, height).data);
     },
     get selectedNode() { return selectedNode; },
+    get selectionEnabled() { return selectionEnabled; },
+    clearSelection,
+    setSelectionEnabled(enabled) {
+        selectionEnabled = !!enabled;
+        if (!selectionEnabled) clearSelection();
+    },
     /** Screen position of a node inside the pane canvas, for the anchored inspector. */
     nodeScreenPosition(index = selectedNode) {
         if (index < 0 || !frame.present || !frame.present[index]) return null;

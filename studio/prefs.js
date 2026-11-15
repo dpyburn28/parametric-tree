@@ -14,6 +14,8 @@ export const DEFAULT_UI_PREFS = {
     activePane: '2d',
     studyOpen: false,
     studyHeight: 280,
+    autoZoom2d: true,
+    autoZoom3d: true,
     record: {
         preset: 'timelapse',
         source: 'split',
@@ -60,6 +62,8 @@ export function loadUiPrefs() {
             activePane: parsed.activePane === '3d' ? '3d' : '2d',
             studyOpen: !!parsed.studyOpen,
             studyHeight: Math.min(480, Math.max(160, Number(parsed.studyHeight) || prefs.studyHeight)),
+            autoZoom2d: parsed.autoZoom2d !== false,
+            autoZoom3d: parsed.autoZoom3d !== false,
             record: Object.assign(prefs.record, parsed.record || {}),
             tourSeen: !!parsed.tourSeen,
         });

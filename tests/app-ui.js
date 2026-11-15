@@ -190,6 +190,14 @@ async function main() {
             };
             const out = {};
 
+            out.initialDefaults = {
+                seed: __tree2d.seed,
+                time: __tree2d.time,
+                mode: S.mode,
+                layout: S.layout,
+                activePane: S.activePane,
+            };
+
             // Manifest coverage: every cloned control appears once, with a scope chip.
             out.manifest = {
                 total: S.manifest.length,
@@ -336,9 +344,17 @@ async function main() {
             };
             out.clearCutsDisabled = panel.querySelector('[data-control-key="clearCuts"] button').disabled;
 
-            // Study: drawer, metric chips, source, baseline workflow, seek.
+            // Study: entering deactivates Prune/Lasso so clicks inspect.
+            document.getElementById('view2d').shadowRoot.getElementById('prune').click();
+            await sleep(150);
             S.setMode('study');
             await sleep(600);
+            out.studyPruneCleared = {
+                two: document.getElementById('view2d').shadowRoot.getElementById('prune').classList.contains('active'),
+                three: document.getElementById('view3d').shadowRoot.getElementById('prune').classList.contains('active'),
+                enabled2: __tree2d.selectionEnabled,
+                enabled3: __tree3d.selectionEnabled,
+            };
             out.study = {
                 hidden: document.getElementById('studyDrawer').hidden,
                 chips: document.querySelectorAll('.metric-chip').length,
@@ -388,6 +404,105 @@ async function main() {
             chart.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
             await sleep(250);
             out.chartStep = +__tree2d.time.toFixed(1);
+
+            // Selection only in Study, with empty-click / Escape / button clearing.
+            S.setActivePane('2d');
+            await sleep(250);
+            const canvas2 = document.getElementById('view2d').shadowRoot.getElementById('c');
+            const findPresent = (bridge) => {
+                for (let i = 1; i < 240; i++) {
+                    const p = bridge.nodeScreenPosition(i);
+                    if (p) return { index: i, pos: p };
+                }
+                return null;
+            };
+            const click2d = (pos) => {
+                const rect = canvas2.getBoundingClientRect();
+                canvas2.dispatchEvent(new MouseEvent('click', {
+                    bubbles: true,
+                    clientX: rect.left + pos.x,
+                    clientY: rect.top + pos.y,
+                }));
+            };
+            const node2 = findPresent(__tree2d);
+            click2d(node2.pos);
+            await sleep(300);
+            out.select2d = {
+                expected: node2.index,
+                selected: __tree2d.selectedNode,
+                anchor: !document.getElementById('anchoredInspector').hidden,
+                clearDisabled: panel.getElementById('clearSelectionButton').disabled,
+            };
+            click2d({ x: canvas2.clientWidth - 5, y: 5 });
+            await sleep(300);
+            out.deselect2dSky = {
+                selected: __tree2d.selectedNode,
+                anchorHidden: document.getElementById('anchoredInspector').hidden,
+                clearDisabled: panel.getElementById('clearSelectionButton').disabled,
+            };
+            click2d(node2.pos);
+            await sleep(250);
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+            await sleep(250);
+            out.deselect2dEscape = __tree2d.selectedNode;
+            click2d(node2.pos);
+            await sleep(250);
+            panel.getElementById('clearSelectionButton').click();
+            await sleep(250);
+            out.deselect2dButton = __tree2d.selectedNode;
+            click2d(node2.pos);
+            await sleep(250);
+            S.setActivePane('3d');
+            await sleep(300);
+            out.activePaneClears = { selected2: __tree2d.selectedNode, active: S.activePane };
+            const node3 = findPresent(__tree3d);
+            if (node3) __tree3d.selectNode(node3.index);
+            await sleep(400);
+            out.select3d = {
+                expected: node3.index,
+                selected: __tree3d.selectedNode,
+                anchor: !document.getElementById('anchoredInspector').hidden,
+            };
+            __tree3d.clearSelection();
+            await sleep(300);
+            out.deselect3dSky = __tree3d.selectedNode;
+            S.setMode('grow');
+            await sleep(300);
+            out.selectionRestricted = {
+                enabled2: __tree2d.selectionEnabled,
+                enabled3: __tree3d.selectionEnabled,
+                selected2: __tree2d.selectedNode,
+                selected3: __tree3d.selectedNode,
+            };
+            S.setMode('study');
+            await sleep(300);
+
+            // Independent Auto-zoom in both View menus.
+            const zoom2dControl = S.getMounted('zoom').querySelector('input');
+            const zoom3dProxy = document.getElementById('autoZoom3d');
+            const engineZoom2d = () => document.getElementById('view2d').shadowRoot.getElementById('zoom');
+            const engineZoom3d = () => document.getElementById('view3d').shadowRoot.getElementById('zoom');
+            setCheck(zoom2dControl, false);
+            await sleep(250);
+            out.autoZoom2dOnly = {
+                proxyExists: !!zoom3dProxy,
+                two: engineZoom2d().checked,
+                three: engineZoom3d().checked,
+                proxy: zoom3dProxy.checked,
+            };
+            setCheck(zoom3dProxy, false);
+            await sleep(250);
+            out.autoZoom3dOnly = {
+                two: engineZoom2d().checked,
+                three: engineZoom3d().checked,
+            };
+            await sleep(350);
+            out.autoZoomPrefs = (() => {
+                try { return JSON.parse(localStorage.getItem('ptree.ui.v1') || '{}'); } catch { return {}; }
+            })();
+            setCheck(zoom2dControl, true);
+            setCheck(zoom3dProxy, true);
+            await sleep(250);
 
             // Deliver export: targets, options, acting-pane switching.
             S.setMode('deliver');
@@ -464,7 +579,7 @@ async function main() {
                 el.dispatchEvent(new Event(type, { bubbles: true }));
             };
             setRec('countdown', '0', 'change');
-            setRec('duration', '3');
+            setRec('duration', '30');
             setRec('holdStart', '0');
             setRec('holdEnd', '0');
             const beforeRecordTime = __tree2d.time;
@@ -486,7 +601,19 @@ async function main() {
                 running: document.body.classList.contains('record-running'),
                 guidesHidden: document.getElementById('recordGuides').hidden,
             };
-            await sleep(3200);
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+            await sleep(500);
+            out.recordAbortExit = {
+                stage: document.body.classList.contains('record-stage'),
+                restored: Math.abs(__tree2d.time - beforeRecordTime) < 0.6,
+            };
+            // Start a short take and poll for completion; headless SwiftShader
+            // can make a single render slower than the take duration.
+            setRec('duration', '1');
+            panel.getElementById('recordStartTake').click();
+            await sleep(350);
+            document.getElementById('recordStart').click();
+            for (let i = 0; i < 40 && S.recordState !== 'complete'; i++) await sleep(200);
             out.recordComplete = {
                 state: S.recordState,
                 card: !document.getElementById('recordComplete').hidden,
@@ -657,6 +784,40 @@ async function main() {
         assert.ok(Math.abs(result.chartSeek.three - 60) < 2, `chart click should seek 3D near year 60 (got ${result.chartSeek.three})`);
         assert.ok(Math.abs(result.chartStep - result.chartSeek.two - 1) < 0.15, 'chart arrow keys should step one year');
 
+        assert.deepStrictEqual(result.studyPruneCleared, {
+            two: false,
+            three: false,
+            enabled2: true,
+            enabled3: true,
+        }, 'Study should disable Prune/Lasso and enable inspection');
+        assert.ok(result.select2d.selected >= 0, '2D should select a clicked node in Study');
+        assert.strictEqual(result.select2d.anchor, true, 'selecting a node should open the anchored inspector');
+        assert.strictEqual(result.select2d.clearDisabled, false, 'Clear selection should enable when a node is selected');
+        assert.strictEqual(result.deselect2dSky.selected, -1, 'clicking 2D sky should clear selection');
+        assert.strictEqual(result.deselect2dSky.anchorHidden, true, 'clearing selection should hide the anchored inspector');
+        assert.strictEqual(result.deselect2dSky.clearDisabled, true, 'Clear selection should disable with no selection');
+        assert.strictEqual(result.deselect2dEscape, -1, 'Escape should clear 2D selection');
+        assert.strictEqual(result.deselect2dButton, -1, 'Clear selection should clear 2D selection');
+        assert.deepStrictEqual(result.activePaneClears, { selected2: -1, active: '3d' }, 'switching the acting view should clear the previous selection');
+        assert.ok(result.select3d.selected >= 0, '3D should select a clicked node in Study');
+        assert.strictEqual(result.select3d.anchor, true, '3D selection should open the anchored inspector');
+        assert.strictEqual(result.deselect3dSky, -1, 'clicking 3D sky should clear selection');
+        assert.deepStrictEqual(result.selectionRestricted, {
+            enabled2: false,
+            enabled3: false,
+            selected2: -1,
+            selected3: -1,
+        }, 'node selection should only be enabled in Study');
+
+        assert.strictEqual(result.autoZoom2dOnly.proxyExists, true, 'the 3D View menu should expose Auto-zoom');
+        assert.strictEqual(result.autoZoom2dOnly.two, false, '2D Auto-zoom should change only 2D');
+        assert.strictEqual(result.autoZoom2dOnly.three, true, 'changing 2D Auto-zoom should leave 3D unchanged');
+        assert.strictEqual(result.autoZoom2dOnly.proxy, true, 'the 3D proxy should stay in sync with 3D');
+        assert.strictEqual(result.autoZoom3dOnly.two, false, 'changing 3D Auto-zoom should leave 2D unchanged');
+        assert.strictEqual(result.autoZoom3dOnly.three, false, '3D Auto-zoom should change the 3D engine');
+        assert.strictEqual(result.autoZoomPrefs.autoZoom2d, false, '2D Auto-zoom should persist in UI prefs');
+        assert.strictEqual(result.autoZoomPrefs.autoZoom3d, false, '3D Auto-zoom should persist in UI prefs');
+
         assert.strictEqual(result.deliverTab.record, 'true', 'Deliver should default to Record');
         assert.strictEqual(result.deliverTab.exportHidden, true, 'Export should be hidden initially');
         assert.strictEqual(result.glb.active, '3d', 'choosing GLB should switch the acting view to 3D');
@@ -692,6 +853,8 @@ async function main() {
         assert.strictEqual(result.recordRunning.guidesHidden, true, 'guides should hide while running');
         assert.strictEqual(result.recordComplete.state, 'complete', 'the take should complete');
         assert.strictEqual(result.recordComplete.card, true, 'the complete card should show');
+        assert.strictEqual(result.recordAbortExit.stage, false, 'Escape should abort the record stage');
+        assert.strictEqual(result.recordAbortExit.restored, true, 'aborting a take should restore the prior time');
         assert.strictEqual(result.recordExit.stage, false, 'Escape should leave the record stage');
         assert.strictEqual(result.recordExit.restored, true, 'leaving the stage should restore the prior time');
 
@@ -983,6 +1146,64 @@ async function main() {
             assert.strictEqual(standalone.toggled, false, `${dimension} standalone compare should toggle`);
             assert.strictEqual(standalone.cleared, null, `${dimension} standalone clear should remove the baseline`);
         }
+
+        // Hard reset: keep tour-seen, clear saved tree/session and UI prefs.
+        await session.send('Emulation.setDeviceMetricsOverride', {
+            width: 1440, height: 900, deviceScaleFactor: 1, mobile: false,
+        });
+        await session.send('Page.navigate', { url: page });
+        assert.ok(await waitReady(session), 'studio should boot for reset checks');
+        const reset = await session.evaluate(`(async () => {
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const S = window.__TREE_STUDIO__;
+            localStorage.setItem('parametric-tree-state-app', JSON.stringify({ version: 2 }));
+            localStorage.setItem('parametric-tree-state-2d', JSON.stringify({ version: 2 }));
+            localStorage.setItem('parametric-tree-state-3d', JSON.stringify({ version: 2 }));
+            localStorage.setItem('ptree.ui.v1', JSON.stringify({ tourSeen: true, mode: 'study', layout: '3d' }));
+            history.replaceState(null, '', location.pathname + '?test=1&state=abc');
+            S.openResetDialog();
+            await sleep(120);
+            const dialog = document.getElementById('resetDialog');
+            const dialogState = {
+                visible: !dialog.hidden,
+                role: dialog.getAttribute('role'),
+                modal: dialog.getAttribute('aria-modal'),
+            };
+            S.closeResetDialog();
+            const href = S.clearStoredAppState();
+            const keys = [];
+            for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i));
+            let ui = {};
+            try { ui = JSON.parse(localStorage.getItem('ptree.ui.v1') || '{}'); } catch {}
+            return { dialogState, href, keys, ui };
+        })()`);
+        assert.strictEqual(reset.dialogState.visible, true, 'Reset should open a confirmation dialog');
+        assert.strictEqual(reset.dialogState.role, 'dialog', 'Reset confirmation should be a dialog');
+        assert.strictEqual(reset.dialogState.modal, 'true', 'Reset confirmation should be modal');
+        assert.ok(!reset.href.includes('state='), 'Reset should remove shared state from the URL');
+        assert.ok(reset.keys.every((key) => !key.startsWith('parametric-tree-state-')), 'Reset should clear saved tree state');
+        assert.strictEqual(reset.ui.tourSeen, true, 'Reset should preserve the tour-seen preference');
+        assert.strictEqual(reset.ui.mode, undefined, 'Reset should clear UI mode preferences');
+        assert.strictEqual(reset.ui.layout, undefined, 'Reset should clear UI layout preferences');
+
+        await session.send('Page.navigate', { url: page });
+        assert.ok(await waitReady(session), 'studio should boot after reset');
+        const resetDefaults = await session.evaluate(`({
+            mode: window.__TREE_STUDIO__.mode,
+            layout: window.__TREE_STUDIO__.layout,
+            activePane: window.__TREE_STUDIO__.activePane,
+            time: __tree2d.time,
+            seed: __tree2d.seed,
+            cuts: __tree2d.captureState().cuts,
+            tourHidden: document.getElementById('tour').hidden,
+        })`);
+        assert.strictEqual(resetDefaults.mode, 'grow', 'Reset should return to Grow');
+        assert.strictEqual(resetDefaults.layout, 'split', 'Reset should return to Split layout');
+        assert.strictEqual(resetDefaults.activePane, '2d', 'Reset should return to the 2D acting view');
+        assert.strictEqual(resetDefaults.time, result.initialDefaults.time, 'Reset should restore the default time');
+        assert.strictEqual(resetDefaults.seed, result.initialDefaults.seed, 'Reset should restore the default seed');
+        assert.deepStrictEqual(resetDefaults.cuts, [], 'Reset should clear cuts');
+        assert.strictEqual(resetDefaults.tourHidden, true, 'Reset should not replay the tour');
 
         await session.evaluate('localStorage.clear()');
         await session.send('Emulation.setEmulatedMedia', {
