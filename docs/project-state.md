@@ -1,7 +1,7 @@
 # Parametric Tree — Current Product State and UI/UX Redesign Handoff
 
-**Snapshot:** 2026-11-14  
-**Status:** Phase 8 closeout complete; Phase 9 validation passing  
+**Snapshot:** 2026-11-14
+**Status:** Stage + dock UI/UX redesign implemented; validation passing
 **Primary entry point:** `linked.html` — the 2D/3D split studio  
 **Standalone debug pages:** `prototype/2d-prototype.html`, `3d-prototype/3d-prototype.html`
 
@@ -18,6 +18,24 @@
 ## 0. One-paragraph orientation
 
 Parametric Tree is a browser-based procedural tree studio. A deterministic simulation grows a tree skeleton from a seed and a set of botanical/environmental parameters. Time is a scrubbable render dimension: the user can move from seed to a 300-year-old tree without re-running the simulation. Two renderers interpret the same idea: a clean, stylized **2D silhouette** on a Canvas 2D surface, and a richer, atmospheric **3D form** built with Three.js. The split studio places both side by side, gives them one shared transport and one universal control rail, and keeps their state synchronized. The product is already deep: species grammars, forests, solar/wind/light models, pruning, branch isolation, ghost comparison, analytics comparison, versioned persistence, share links, SVG/GLB/PNG/CSV/JSON/ZIP export, keyboard support, reduced motion, and a mobile drawer. The current UI, however, still reads like a powerful prototype: it is dense, flat in hierarchy, and organized around implementation categories rather than user workflows.
+
+---
+
+## 0. Redesign closeout (2026-11-14)
+
+The **Stage + dock** redesign in [`ui-ux-redesign-plan.md`](ui-ux-redesign-plan.md) is implemented in the studio:
+
+- **Mode rail + one flyout:** Grow, Sculpt, Study and Deliver replace the flat control rail. Every cloned control is described in `studio/manifest.js` and re-parented exactly once.
+- **Stage:** Split, 2D-focus and 3D-focus layouts are separate from the acting view. The acting pane uses a 2px accent border and an “Acting here” chip; inactive panes show “Linked”.
+- **Transport dock:** persistent play/step/rewind, an editable age readout, a season-banded scrubber with stage labels, lifespan/speed/season popovers, sync status and a simulate progress sliver.
+- **Grow:** species cards, Spread/Bushiness/Leafiness essentials, seed row, grouped Shape, grouped Environment with scope chips, collapsed Planting.
+- **Sculpt:** tool flyout, floating toolbar, canvas hint strip, anchored inspector, renamed Capture before / Show ghost.
+- **Study:** large analytics drawer with metric chips, stacked sparklines, source toggle, run A comparison, overlays and the full node inspector.
+- **Deliver:** Record (deterministic takes for screen capture) and Export (SVG, PNG, GLB, CSV/JSON, batch ZIP, share link) tabs.
+- **Discoverability:** command palette (`⌘K`), inline help, shortcut overlay, first-run tour, toasts and live-region announcements.
+- **Responsive:** tablet overlay drawer, phone bottom sheet with peek/half/full snap points, one pane at a time, and a Timeline settings sheet.
+
+UI preferences live in `localStorage` under `ptree.ui.v1` and never enter schema v2, state JSON or share links. The standalone 2D and 3D pages retain their original control surfaces and behavior.
 
 ---
 
@@ -243,8 +261,8 @@ activePreset, viz, ui, exportSettings, compare, camera
 - `exportSettings` is shared across studio panes through `window.__TREE_EXPORT_SETTINGS__`.
 - `compare` stores the analytics baseline and whether comparison is enabled.
 - `camera` is 3D-only; 2D captures `null`.
-- localStorage keys are `parametric-tree-state-app`, `-2d`, and `-3d`.
-- Share links encode base64 JSON in `?state=` (not compressed).
+- localStorage keys are `parametric-tree-state-app`, `-2d`, and `-3d`. Studio UI preferences use the separate key `ptree.ui.v1`.
+- Share links encode base64 JSON in `?state=` (not compressed). UI preferences and Record settings never enter share links.
 - Malformed JSON and future schema versions fail with a readable status message.
 - Autosave is debounced ~400 ms.
 
@@ -301,6 +319,8 @@ The studio fetches pane templates and shared modules. The standalone 2D page is 
 ---
 
 ## 6. Current UI structure
+
+> **Superseded for the studio.** The Stage + dock implementation is summarized in §0. The sections below record the pre-redesign structure and remain accurate for the standalone 2D/3D pages, the engine behavior and the control semantics that the new shell re-parents.
 
 ### 6.1 Surfaces
 
@@ -819,8 +839,11 @@ Studio and standalone support:
 | `I` | Toggle Isolate selected |
 | `Cmd/Ctrl+Z` | Undo cut |
 | `Cmd/Ctrl+Shift+Z` or `Ctrl+Y` | Redo cut |
+| `Alt/Option+1…4` | Switch Grow / Sculpt / Study / Deliver (matched by physical key) |
+| `Cmd/Ctrl+K` | Open the command palette |
+| `?` | Open the keyboard shortcuts overlay |
 
-Shortcuts are listed in a collapsed “Keyboard help” details near the bottom of the panel. They are not surfaced contextually.
+Shortcuts are surfaced in the header `?` overlay and the Project menu. In the redesigned studio, `1`/`2` set the acting view, while the header layout switch (`Split` / `2D` / `3D`) changes only what is visible.
 
 ### 7.10 Persistence and export flows
 
@@ -1294,9 +1317,14 @@ These are intentionally unresolved. The redesign should make a recommendation, n
 
 | Path | Role |
 |---|---|
-| `linked.html` | Studio shell, header, panes, panel, fullscreen UI |
-| `linked.css` | Studio layout, panel, responsive drawer, fullscreen, focus styles |
-| `linked.js` | Studio controller, pane mounting, universal panel clone, state bus, transport, mobile drawer, fullscreen |
+| `linked.html` | Studio shell, header, mode rail, flyout, stage panes, transport dock, Study drawer, dialogs and record stage |
+| `linked.css` | Studio tokens, shell, stage, dock, dialogs, fullscreen, record stage |
+| `studio.css` | Mode rail, flyout chrome, stage tools, Study drawer, record chrome, responsive sheet |
+| `linked.js` | Studio controller, manifest mount/sync, modes, layout, transport, Study chart, palette, record controller and mobile sheet |
+| `studio/manifest.js` | One entry per cloned control with mode, group, disclosure level, scope and help |
+| `studio/prefs.js` | UI-only preferences (`ptree.ui.v1`) |
+| `studio/icons.js` | Inline SVG icon set |
+| `studio/record-controller.js` | Deterministic take sampling, easing, holds, loops and camera orbit helpers |
 | `prototype/2d-prototype.html` | Standalone 2D page and control markup |
 | `prototype/styles.css` | Standalone 2D visual design and responsive/accessibility styles |
 | `prototype/simulation.js` | 2D skeleton simulation |
@@ -1316,7 +1344,8 @@ These are intentionally unresolved. The redesign should make a recommendation, n
 | `tests/phase7.js` | Species render traits |
 | `tests/phase8.js` | State v2/migration/round-trip |
 | `tests/phase9.js` | ZIP/CRC structure |
-| `tests/app-ui.js` | Studio/standalone UI, analytics, batch, accessibility, mobile drawer, reduced motion |
+| `tests/app-ui.js` | Studio manifest/modes/dock/record/palette/mobile checks plus standalone accessibility and behavior |
+| `tests/record-controller.js` | Take sampling unit tests (easing, holds, loops, season, camera, determinism) |
 | `tests/visual-regression.js` | 2D/3D/studio visual baselines |
 | `docs/release-checklist.md` | Automated/manual release checks and current profile |
 | `parametric-tree.md` | Refinement/fidelity roadmap and phase record |

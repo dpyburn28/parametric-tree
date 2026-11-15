@@ -2294,9 +2294,23 @@ function setTime(v) {
     postLinkedPatch({ time, season, seasonAuto });
 }
 
+/** Backward-compatible simulation progress events for the studio dock. */
+function notifySimulateStart() {
+    window.dispatchEvent(new CustomEvent('tree-simulate-start', { detail: { dimension: DIMENSION } }));
+}
+
+function notifySimulateEnd() {
+    window.dispatchEvent(new CustomEvent('tree-simulate-end', { detail: { dimension: DIMENSION } }));
+}
+
 /** Re-run the simulation (after a parameter or seed change) and redraw. */
 function regenerate() {
-    simulate();
+    notifySimulateStart();
+    try {
+        simulate();
+    } finally {
+        notifySimulateEnd();
+    }
     selectedNode = -1;
     isolateNode = -1;
     clearHover();
@@ -2876,7 +2890,37 @@ window.__tree2d = {
         draw();
         postLinkedPatch({ season, seasonAuto: false });
     },
+    setSeasonSilent(v) {
+        season = v;
+        seasonAuto = false;
+        updateSeasonLabel();
+        draw();
+    },
+    resize() { resizeCanvas(); },
+    get selectedNode() { return selectedNode; },
+    /** Screen position of a node inside the pane canvas, for the anchored inspector. */
+    nodeScreenPosition(index = selectedNode) {
+        if (index < 0 || !lastCamera || !frame.present[index]) return null;
+        return {
+            x: lastCamera.toX(frame.px[index]),
+            y: lastCamera.toY(frame.py[index]),
+            width: canvas.clientWidth,
+            height: canvas.clientHeight,
+        };
+    },
     selectNode,
+    pruneSelected() {
+        if (selectedNode < 0) return false;
+        const node = nodes[selectedNode];
+        if (!node || node.parent < 0) return false;
+        const pruneType = $('pruneType') ? $('pruneType').value : 'thinning';
+        recordCutAction();
+        addPrune(node.budId, node.birthStep, pruneType);
+        selectedNode = -1;
+        clearHover();
+        regenerate();
+        return true;
+    },
 };
 
 /* ==========================================================================
@@ -2887,7 +2931,9 @@ buildPresetControls();
 buildParamControls();
 bindControls();
 updateDayNight();
+notifySimulateStart();
 simulate();
+notifySimulateEnd();
 rebuildPruneMarks();
 updateCutButtons();
 $('seedv').textContent = 'seed ' + seed;

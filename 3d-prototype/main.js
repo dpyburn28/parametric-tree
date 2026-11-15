@@ -3504,10 +3504,24 @@ function setTime(v) {
     postLinkedPatch({ time, season, seasonAuto });
 }
 
+/** Backward-compatible simulation progress events for the studio dock. */
+function notifySimulateStart() {
+    window.dispatchEvent(new CustomEvent('tree-simulate-start', { detail: { dimension: '3d' } }));
+}
+
+function notifySimulateEnd() {
+    window.dispatchEvent(new CustomEvent('tree-simulate-end', { detail: { dimension: '3d' } }));
+}
+
 /** Re-run the 3D simulation (after a parameter or seed change) and update meshes. */
 function regenerate() {
     let t0 = performance.now();
-    simulate();
+    notifySimulateStart();
+    try {
+        simulate();
+    } finally {
+        notifySimulateEnd();
+    }
     perf.simulate = performance.now() - t0;
     updateTerrain();
     updateContactShadows();
@@ -4913,6 +4927,12 @@ window.__tree3d = {
         updateSeasonLabel();
         updateSceneFromTime(false);
     },
+    setSeasonSilent(v) {
+        season = v;
+        seasonAuto = false;
+        updateSeasonLabel();
+        updateSceneFromTime(false);
+    },
     captureGrid(width = 80, height = 50) {
         renderer.render(scene, camera);
         const c = document.createElement('canvas');
@@ -4922,7 +4942,40 @@ window.__tree3d = {
         g.drawImage(renderer.domElement, 0, 0, width, height);
         return Array.from(g.getImageData(0, 0, width, height).data);
     },
+    get selectedNode() { return selectedNode; },
+    /** Screen position of a node inside the pane canvas, for the anchored inspector. */
+    nodeScreenPosition(index = selectedNode) {
+        if (index < 0 || !frame.present || !frame.present[index]) return null;
+        const rect = canvas.getBoundingClientRect();
+        if (!rect.width || !rect.height) return null;
+        const projected = new THREE.Vector3(frame.px[index], frame.py[index], frame.pz[index]).project(camera);
+        if (projected.z < -1 || projected.z > 1) return null;
+        return {
+            x: (projected.x + 1) * 0.5 * rect.width,
+            y: (-projected.y + 1) * 0.5 * rect.height,
+            width: rect.width,
+            height: rect.height,
+        };
+    },
+    captureCamera() {
+        return {
+            position: camera.position.toArray(),
+            target: controls.target.toArray(),
+        };
+    },
+    setCameraPose(pose) {
+        if (!pose || !pose.position || !pose.target) return;
+        camera.position.set(...pose.position);
+        controls.target.set(...pose.target);
+        controls.update();
+    },
+    resize() { resizeCanvas(); },
     selectNode,
+    pruneSelected() {
+        if (selectedNode < 0) return false;
+        pruneNodeAt(selectedNode);
+        return true;
+    },
     leafStyleAt(i, k = 0) { return leafStyle(currentSeason(), i, k, nodes[i]); },
 };
 
@@ -4937,7 +4990,9 @@ buildPresetControls();
 buildParamControls();
 bindControls();
 updateDayNight();
+notifySimulateStart();
 simulate();
+notifySimulateEnd();
 updateTerrain();
 updateContactShadows();
 updateGroundDetail();

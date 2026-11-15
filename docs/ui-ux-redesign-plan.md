@@ -2,7 +2,7 @@
 
 > **Companion:** [`project-state.md`](project-state.md) (snapshot 2026-11-14)  
 > **Audience:** the project AI that will implement the redesign  
-> **Status:** design direction approved
+> **Status:** implemented 2026-11-14 — see `project-state.md` §0 for the closeout
 
 ## 1. How to use this plan
 
