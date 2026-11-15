@@ -179,6 +179,7 @@ export function orbitPose(pose, degrees) {
     const dx = x - tx;
     const dz = z - tz;
     return {
+        ...pose,
         position: [
             tx + dx * Math.cos(rad) - dz * Math.sin(rad),
             y,

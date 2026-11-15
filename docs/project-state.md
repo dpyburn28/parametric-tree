@@ -36,6 +36,7 @@ The **Stage + dock** redesign in [`ui-ux-redesign-plan.md`](ui-ux-redesign-plan.
 - **Responsive:** tablet overlay drawer, phone bottom sheet with peek/half/full snap points, one pane at a time, and a Timeline settings sheet.
 - **Inspection:** node selection is Study-only, clears on empty clicks, `Esc`, the Clear selection button or the anchored close button, and survives state re-syncs by stable `budId:birthStep` identity.
 - **View options:** Auto-zoom is independent for 2D and 3D, each exposed in its own pane View menu and persisted in `ptree.ui.v1`.
+- **3D camera:** the 3D View menu exposes position, FOV, look-at, auto look-at, auto-orbit, and an optional separate orbit pivot; camera settings persist with the tree state.
 - **Reset:** Project ▸ Reset app state clears saved tree/session state and UI layout preferences while preserving the tour-seen flag, then reloads to defaults.
 
 UI preferences live in `localStorage` under `ptree.ui.v1` and never enter schema v2, state JSON or share links. The standalone 2D and 3D pages retain their original control surfaces and behavior.
@@ -1394,7 +1395,13 @@ These are intentionally unresolved. The redesign should make a recommendation, n
   } | null,
   camera: {
     position: [x, y, z],
-    target: [x, y, z]
+    target: [x, y, z],
+    fov?: number,
+    lookAt?: [x, y, z],
+    autoLookAt?: boolean,
+    useLookAtForOrbit?: boolean,
+    orbitEnabled?: boolean,
+    limitsEnabled?: boolean
   } | null
 }
 ```

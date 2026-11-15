@@ -511,6 +511,8 @@ body.panel-collapsed .app-body {
     right: 0;
     top: calc(100% + 4px);
     min-width: 180px;
+    max-height: min(72vh, 620px);
+    overflow-y: auto;
     padding: 8px;
     border: 1px solid var(--line);
     border-radius: 10px;
@@ -529,6 +531,81 @@ body.panel-collapsed .app-body {
 
 .view-menu-body input {
     accent-color: var(--accent);
+}
+
+.view-menu-sub {
+    margin-top: 6px;
+    padding-top: 5px;
+    border-top: 1px solid var(--line);
+}
+
+.view-menu-sub > summary {
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    list-style: none;
+    padding: 3px 2px;
+}
+
+.view-menu-sub > summary::-webkit-details-marker {
+    display: none;
+}
+
+.view-menu-sub > summary:hover {
+    color: var(--accent);
+}
+
+.camera-menu-body {
+    display: grid;
+    gap: 5px;
+    padding: 3px 2px 2px;
+    min-width: 232px;
+}
+
+.camera-row {
+    display: grid;
+    grid-template-columns: 48px repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    align-items: center;
+}
+
+.camera-row span {
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.camera-row-fov {
+    grid-template-columns: 48px minmax(0, 1fr);
+}
+
+.camera-row input {
+    width: 100%;
+    min-width: 0;
+    padding: 3px 4px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: var(--card);
+    color: var(--fg);
+    font: 11px/1.2 var(--ui);
+}
+
+.camera-row input:disabled {
+    opacity: 0.55;
+}
+
+.camera-check {
+    font-size: 11px;
+}
+
+.camera-menu-body #camResetCamera {
+    justify-self: start;
+    margin-top: 2px;
+    padding: 4px 7px;
+    font-size: 11px;
 }
 
 .view-host {

@@ -512,6 +512,10 @@ const clock = new THREE.Clock();
 
 const camera = new THREE.PerspectiveCamera(42, 1, 0.5, 5000);
 camera.position.set(180, 120, 240);
+const cameraLookAt = new THREE.Vector3(0, 40, 0);
+let autoLookAt = true;
+let useLookAtForOrbit = true;
+let cameraLimitsEnabled = true;
 
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
@@ -520,6 +524,17 @@ controls.maxPolarAngle = Math.PI * 0.495; // stay above ground
 controls.minDistance = 8;
 controls.maxDistance = 1200;
 controls.target.set(0, 40, 0);
+controls.addEventListener('end', () => scheduleStateAutosave());
+
+/** Toggle the orbit distance and ground/polar safety clamps. */
+function applyCameraLimits(enabled) {
+    cameraLimitsEnabled = !!enabled;
+    controls.minDistance = cameraLimitsEnabled ? 8 : 0.01;
+    controls.maxDistance = cameraLimitsEnabled ? 1200 : Infinity;
+    controls.minPolarAngle = 0;
+    controls.maxPolarAngle = cameraLimitsEnabled ? Math.PI * 0.495 : Math.PI;
+    controls.update();
+}
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
@@ -2894,19 +2909,35 @@ function updateShadowCamera(bounds) {
     sunLight.position.set(cx + dir.x * dist, cy + dir.y * dist, cz + dir.z * dist);
 }
 
+/** Look-at point at the centre of the current tree bounds. */
+function treeLookAtFromBounds(bounds) {
+    const height = Math.max(bounds.maxY, 24) + 14;
+    return {
+        x: (bounds.minX + bounds.maxX) * 0.5,
+        y: Math.max(height * 0.44, 8),
+        z: (bounds.minZ + bounds.maxZ) * 0.5,
+    };
+}
+
+/** Keep the look-at target on the tree while auto look-at is enabled. */
+function updateLookAtForBounds(bounds, smooth = false) {
+    if (!autoLookAt) return;
+    const center = treeLookAtFromBounds(bounds);
+    const alpha = smooth ? 0.15 : 1;
+    cameraLookAt.lerp(new THREE.Vector3(center.x, center.y, center.z), alpha);
+    if (useLookAtForOrbit) controls.target.copy(cameraLookAt);
+}
+
 /**
- * Fit the camera distance and target height to `bounds` while keeping the
- * user's current orbit azimuth/elevation angles.
+ * Fit the camera distance to `bounds` while keeping the current orbit
+ * direction. The orbit target is owned by the look-at/orbit controls, so this
+ * never recentres a manually positioned look-at.
  */
 function frameCameraToBounds(bounds, smooth = false) {
     const spanX = bounds.maxX - bounds.minX;
     const spanZ = bounds.maxZ - bounds.minZ;
     const width = Math.max(spanX, spanZ, 28) + 16;
     const height = Math.max(bounds.maxY, 24) + 14;
-
-    const centerX = (bounds.minX + bounds.maxX) * 0.5;
-    const centerY = Math.max(height * 0.44, 8);
-    const centerZ = (bounds.minZ + bounds.maxZ) * 0.5;
 
     const fovRad = THREE.MathUtils.degToRad(camera.fov);
     const aspect = Math.max(0.5, canvas.clientWidth / Math.max(1, canvas.clientHeight));
@@ -2919,9 +2950,7 @@ function frameCameraToBounds(bounds, smooth = false) {
     const currentDist = offset.length() || 1;
     offset.divideScalar(currentDist);
 
-    const newTarget = new THREE.Vector3(centerX, centerY, centerZ);
     const alpha = smooth ? 0.15 : 1.0;
-    controls.target.lerp(newTarget, alpha);
     const nextDist = THREE.MathUtils.lerp(currentDist, desiredDist, alpha);
     camera.position.copy(controls.target).addScaledVector(offset, nextDist);
 }
@@ -3395,6 +3424,7 @@ function updateSceneFromTime(smoothZoom = false) {
     drawAnalytics();
     scheduleStateAutosave();
 
+    updateLookAtForBounds(state, smoothZoom);
     if ($('zoom').checked) {
         frameCameraToBounds(state, smoothZoom);
     }
@@ -3402,6 +3432,7 @@ function updateSceneFromTime(smoothZoom = false) {
 
 function renderFrame() {
     controls.update();
+    camera.lookAt(cameraLookAt);
     if (bloomPass.enabled) composer.render();
     else renderer.render(scene, camera);
 }
@@ -4303,6 +4334,131 @@ async function exportBatchZip() {
     }
 }
 
+/** Normalise an [x,y,z] or {x,y,z} camera value. */
+function cameraVector(value) {
+    if (Array.isArray(value) && value.length >= 3
+        && value.slice(0, 3).every((n) => Number.isFinite(Number(n)))) {
+        return [Number(value[0]), Number(value[1]), Number(value[2])];
+    }
+    if (value && ['x', 'y', 'z'].every((key) => Number.isFinite(Number(value[key])))) {
+        return [Number(value.x), Number(value.y), Number(value.z)];
+    }
+    return null;
+}
+
+function cameraSettings() {
+    return {
+        position: camera.position.toArray(),
+        lookAt: cameraLookAt.toArray(),
+        orbitTarget: controls.target.toArray(),
+        fov: camera.fov,
+        autoLookAt,
+        useLookAtForOrbit,
+        orbitEnabled: !!$('spin')?.checked,
+        autoZoom: !!$('zoom')?.checked,
+        limitsEnabled: cameraLimitsEnabled,
+    };
+}
+
+/** Apply a partial camera update from the View menu or bridge. */
+function setCameraSettings(patch = {}) {
+    if (!patch || typeof patch !== 'object') return cameraSettings();
+    const position = cameraVector(patch.position);
+    const lookAt = cameraVector(patch.lookAt);
+    const orbitTarget = cameraVector(patch.orbitTarget);
+    let nextAutoLookAt = 'autoLookAt' in patch ? !!patch.autoLookAt : autoLookAt;
+    let nextUseLookAtForOrbit = 'useLookAtForOrbit' in patch
+        ? !!patch.useLookAtForOrbit
+        : useLookAtForOrbit;
+
+    if ('limitsEnabled' in patch) applyCameraLimits(!!patch.limitsEnabled);
+
+    if (position) {
+        camera.position.set(...position);
+        // A manual camera position is an explicit override of auto-framing.
+        if ($('zoom')) $('zoom').checked = false;
+    }
+    if (lookAt) {
+        cameraLookAt.set(...lookAt);
+        if (!('autoLookAt' in patch)) nextAutoLookAt = false;
+    }
+    if ('autoLookAt' in patch && nextAutoLookAt) {
+        const center = treeLookAtFromBounds(computeFrameState());
+        cameraLookAt.set(center.x, center.y, center.z);
+    }
+    if (orbitTarget) {
+        controls.target.set(...orbitTarget);
+        if (!('useLookAtForOrbit' in patch)) nextUseLookAtForOrbit = false;
+    }
+
+    autoLookAt = nextAutoLookAt;
+    useLookAtForOrbit = nextUseLookAtForOrbit;
+    if (useLookAtForOrbit) controls.target.copy(cameraLookAt);
+
+    if ('fov' in patch) {
+        const fov = Math.min(120, Math.max(15, Number(patch.fov) || camera.fov));
+        camera.fov = fov;
+        camera.updateProjectionMatrix();
+        if ($('zoom')?.checked) frameCameraToBounds(computeFrameState(), false);
+    }
+    if ('orbitEnabled' in patch && $('spin')) {
+        $('spin').checked = !!patch.orbitEnabled;
+    }
+
+    controls.update();
+    camera.lookAt(cameraLookAt);
+    scheduleStateAutosave();
+    return cameraSettings();
+}
+
+/** Restore the default three-quarter camera and auto framing. */
+function resetCamera() {
+    autoLookAt = true;
+    useLookAtForOrbit = true;
+    applyCameraLimits(true);
+    camera.fov = 42;
+    camera.updateProjectionMatrix();
+    camera.position.set(180, 120, 240);
+    if ($('zoom')) $('zoom').checked = true;
+    const state = computeFrameState();
+    const center = treeLookAtFromBounds(state);
+    cameraLookAt.set(center.x, center.y, center.z);
+    controls.target.copy(cameraLookAt);
+    frameCameraToBounds(state, false);
+    controls.update();
+    camera.lookAt(cameraLookAt);
+    scheduleStateAutosave();
+    return cameraSettings();
+}
+
+/** Apply a camera object from saved state or a record snapshot. */
+function applyCameraState(state) {
+    if (!state) return;
+    const position = cameraVector(state.position);
+    const target = cameraVector(state.target);
+    const lookAt = cameraVector(state.lookAt);
+    applyCameraLimits(state.limitsEnabled !== undefined ? !!state.limitsEnabled : true);
+    if (position) camera.position.set(...position);
+    if (target) controls.target.set(...target);
+    if (lookAt) cameraLookAt.set(...lookAt);
+    else if (target) cameraLookAt.set(...target);
+    autoLookAt = state.autoLookAt !== undefined ? !!state.autoLookAt : true;
+    useLookAtForOrbit = state.useLookAtForOrbit !== undefined ? !!state.useLookAtForOrbit : true;
+    if (state.fov !== undefined) {
+        const fov = Number(state.fov);
+        if (Number.isFinite(fov)) {
+            camera.fov = Math.min(120, Math.max(15, fov));
+            camera.updateProjectionMatrix();
+        }
+    }
+    if (state.orbitEnabled !== undefined && $('spin')) {
+        $('spin').checked = !!state.orbitEnabled;
+    }
+    if (useLookAtForOrbit) controls.target.copy(cameraLookAt);
+    controls.update();
+    camera.lookAt(cameraLookAt);
+}
+
 function captureAppState() {
     return captureTreeState({
         dimension: DIMENSION,
@@ -4319,7 +4475,16 @@ function captureAppState() {
             baseline: analyticsBaseline,
         } : null,
         exportSettings: Object.assign({}, exportSettings),
-        camera: { position: camera.position, target: controls.target },
+        camera: {
+            position: camera.position,
+            target: controls.target,
+            fov: camera.fov,
+            lookAt: cameraLookAt,
+            autoLookAt,
+            useLookAtForOrbit,
+            orbitEnabled: !!$('spin')?.checked,
+            limitsEnabled: cameraLimitsEnabled,
+        },
     });
 }
 
@@ -4384,9 +4549,7 @@ function restoreAppState(state, options = {}) {
     resetCutHistory();
 
     if (state.camera && state.camera.position && state.camera.target) {
-        camera.position.set(...state.camera.position);
-        controls.target.set(...state.camera.target);
-        controls.update();
+        applyCameraState(state.camera);
     }
 
     syncParamInputs();
@@ -4422,9 +4585,7 @@ function restoreAppState(state, options = {}) {
     regenerate();
     if (state.camera && state.camera.position && state.camera.target) {
         if (!LINKED_MODE && $('zoom')) $('zoom').checked = false;
-        camera.position.set(...state.camera.position);
-        controls.target.set(...state.camera.target);
-        controls.update();
+        applyCameraState(state.camera);
     }
     if (options.preserveSelection && previousSelectionId && selectionEnabled) {
         const restoredIndex = nodes.findIndex((node) => `${node.budId}:${node.birthStep}` === previousSelectionId);
@@ -4991,16 +5152,19 @@ window.__tree3d = {
         };
     },
     captureCamera() {
-        return {
-            position: camera.position.toArray(),
-            target: controls.target.toArray(),
-        };
+        return cameraSettings();
+    },
+    getCameraSettings() {
+        return cameraSettings();
+    },
+    setCameraSettings(patch) {
+        return setCameraSettings(patch);
+    },
+    resetCamera() {
+        return resetCamera();
     },
     setCameraPose(pose) {
-        if (!pose || !pose.position || !pose.target) return;
-        camera.position.set(...pose.position);
-        controls.target.set(...pose.target);
-        controls.update();
+        applyCameraState(pose);
     },
     resize() { resizeCanvas(); },
     selectNode,

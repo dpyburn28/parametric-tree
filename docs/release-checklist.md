@@ -42,6 +42,7 @@ node tests/visual-regression.js --update
 - [ ] Study: large chart, metric chips, source toggle, click/arrow seek, run A pin/compare/clear, overlays, node inspector.
 - [ ] Node inspection: select only in Study; click sky/ground, press Esc, use Clear selection or the anchor close to deselect; the highlight and inspector card disappear and stay gone.
 - [ ] Auto-zoom: independent 2D and 3D toggles are reachable from each pane View menu and persist across reloads.
+- [ ] 3D Camera menu: position, FOV, look-at and auto look-at update live; auto-orbit uses the look-at by default and the optional orbit pivot when “Orbit around look-at” is off; Camera limits can be turned off to place the camera below ground or beyond the normal distance; camera settings survive reload.
 - [ ] Hard reset: Project ▸ Reset app state clears the tree/session and UI layout, preserves the tour-seen flag, strips `?state=` and returns to Split / Grow defaults.
 - [ ] Deliver Export: all six targets show the right options, switch the acting view when needed, and keep filenames/contents.
 - [ ] Deliver Record: preset fills settings, preflight reports frame/quality/motion, preview runs, and a take goes Armed → Countdown → Running → Complete; `Esc` restores prior state.

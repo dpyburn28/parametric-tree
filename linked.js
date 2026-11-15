@@ -1763,7 +1763,12 @@ function syncPanel() {
     updateActingChips();
     const zoomProxy = document.getElementById('autoZoom3d');
     const zoom3d = findInShadow(shadow3d, 'zoom');
-    if (zoomProxy && zoom3d && zoomProxy.checked !== zoom3d.checked) zoomProxy.checked = zoom3d.checked;
+    if (zoomProxy && zoom3d && zoomProxy.checked !== zoom3d.checked) {
+        zoomProxy.checked = zoom3d.checked;
+        prefs.autoZoom3d = zoom3d.checked;
+        savePrefs();
+    }
+    syncCameraMenu();
 }
 
 function updateSpeciesBanner() {
@@ -2904,6 +2909,152 @@ function applyAutoZoomPrefs() {
     }
     const proxy = document.getElementById('autoZoom3d');
     if (proxy) proxy.checked = prefs.autoZoom3d !== false;
+}
+
+let cameraMenu = null;
+
+function cameraBridge() {
+    return window.__tree3d;
+}
+
+function cameraInputValue(input) {
+    const raw = input?.value?.trim();
+    if (!raw) return null;
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : null;
+}
+
+function cameraVec(ids) {
+    const values = ids.map((id) => cameraInputValue(document.getElementById(id)));
+    return values.every((value) => value !== null) ? values : null;
+}
+
+function applyCameraPatch(patch) {
+    const bridge = cameraBridge();
+    if (!bridge?.setCameraSettings) return;
+    bridge.setCameraSettings(patch);
+    syncCameraMenu();
+}
+
+function buildCameraMenu() {
+    const slot = document.querySelector('[data-slot="view-3d"]');
+    if (!slot || slot.querySelector('#cameraMenu')) return;
+
+    const details = document.createElement('details');
+    details.className = 'view-menu-sub';
+    details.id = 'cameraMenu';
+    details.innerHTML = `
+        <summary>Camera</summary>
+        <div class="camera-menu-body">
+            <div class="camera-row">
+                <span>Position</span>
+                <input type="number" id="camPosX" step="0.1" aria-label="Camera X">
+                <input type="number" id="camPosY" step="0.1" aria-label="Camera Y">
+                <input type="number" id="camPosZ" step="0.1" aria-label="Camera Z">
+            </div>
+            <div class="camera-row camera-row-fov">
+                <span>FOV</span>
+                <input type="number" id="camFov" min="15" max="120" step="1" aria-label="Camera field of view">
+            </div>
+            <label class="camera-check" title="Keep the camera above ground and within orbit distance limits"><input type="checkbox" id="camLimits"> Camera limits</label>
+            <div class="camera-row">
+                <span>Look at</span>
+                <input type="number" id="camLookX" step="0.1" aria-label="Look-at X">
+                <input type="number" id="camLookY" step="0.1" aria-label="Look-at Y">
+                <input type="number" id="camLookZ" step="0.1" aria-label="Look-at Z">
+            </div>
+            <label class="camera-check"><input type="checkbox" id="camAutoLook"> Auto look at tree</label>
+            <label class="camera-check"><input type="checkbox" id="camOrbitLook"> Orbit around look-at</label>
+            <div class="camera-row">
+                <span>Orbit</span>
+                <input type="number" id="camOrbitX" step="0.1" aria-label="Orbit X">
+                <input type="number" id="camOrbitY" step="0.1" aria-label="Orbit Y">
+                <input type="number" id="camOrbitZ" step="0.1" aria-label="Orbit Z">
+            </div>
+            <button type="button" id="camResetCamera" class="quiet-button">Reset camera</button>
+        </div>`;
+    slot.appendChild(details);
+    cameraMenu = details;
+
+    const spinNode = slot.querySelector('[data-control-key="spin"]');
+    const spinInput = spinNode?.querySelector('input');
+    spinInput?.addEventListener('change', () => {
+        cameraBridge()?.setCameraSettings?.({ orbitEnabled: spinInput.checked });
+        syncCameraMenu();
+    });
+
+    for (const [ids, key] of [
+        [['camPosX', 'camPosY', 'camPosZ'], 'position'],
+        [['camLookX', 'camLookY', 'camLookZ'], 'lookAt'],
+        [['camOrbitX', 'camOrbitY', 'camOrbitZ'], 'orbitTarget'],
+    ]) {
+        for (const id of ids) {
+            const input = document.getElementById(id);
+            input?.addEventListener('change', () => {
+                const vec = cameraVec(ids);
+                if (vec) applyCameraPatch({ [key]: vec });
+            });
+        }
+    }
+
+    document.getElementById('camFov')?.addEventListener('change', (event) => {
+        const fov = cameraInputValue(event.target);
+        if (fov !== null) applyCameraPatch({ fov });
+    });
+    document.getElementById('camLimits')?.addEventListener('change', (event) => {
+        applyCameraPatch({ limitsEnabled: event.target.checked });
+    });
+    document.getElementById('camAutoLook')?.addEventListener('change', (event) => {
+        applyCameraPatch({ autoLookAt: event.target.checked });
+    });
+    document.getElementById('camOrbitLook')?.addEventListener('change', (event) => {
+        applyCameraPatch({ useLookAtForOrbit: event.target.checked });
+    });
+    document.getElementById('camResetCamera')?.addEventListener('click', () => {
+        cameraBridge()?.resetCamera?.();
+        syncCameraMenu();
+    });
+
+    syncCameraMenu();
+}
+
+function setCameraField(id, value) {
+    const input = document.getElementById(id);
+    if (!input || document.activeElement === input) return;
+    input.value = Number(value).toFixed(1).replace(/\.0$/, '');
+}
+
+function syncCameraMenu() {
+    if (!cameraMenu) return;
+    const settings = cameraBridge()?.getCameraSettings?.();
+    if (!settings) return;
+    setCameraField('camPosX', settings.position[0]);
+    setCameraField('camPosY', settings.position[1]);
+    setCameraField('camPosZ', settings.position[2]);
+    setCameraField('camFov', settings.fov);
+    setCameraField('camLookX', settings.lookAt[0]);
+    setCameraField('camLookY', settings.lookAt[1]);
+    setCameraField('camLookZ', settings.lookAt[2]);
+    setCameraField('camOrbitX', settings.orbitTarget[0]);
+    setCameraField('camOrbitY', settings.orbitTarget[1]);
+    setCameraField('camOrbitZ', settings.orbitTarget[2]);
+
+    const autoLook = document.getElementById('camAutoLook');
+    if (autoLook && document.activeElement !== autoLook) autoLook.checked = !!settings.autoLookAt;
+    const limits = document.getElementById('camLimits');
+    if (limits && document.activeElement !== limits) limits.checked = !!settings.limitsEnabled;
+    const orbitLook = document.getElementById('camOrbitLook');
+    if (orbitLook && document.activeElement !== orbitLook) {
+        orbitLook.checked = !!settings.useLookAtForOrbit;
+    }
+    for (const id of ['camLookX', 'camLookY', 'camLookZ']) {
+        const input = document.getElementById(id);
+        if (input) input.disabled = !!settings.autoLookAt;
+    }
+    for (const id of ['camOrbitX', 'camOrbitY', 'camOrbitZ']) {
+        const input = document.getElementById(id);
+        if (input) input.disabled = !!settings.useLookAtForOrbit;
+    }
 }
 
 function buildSculptToolbar() {
@@ -4282,6 +4433,11 @@ const appBus = {
         if (message.type === 'tree-state' || message.type === 'tree-ready') {
             if (message.type === 'tree-state') pendingLocalState.delete(from);
             if (message.state) {
+                // 2D state has no camera; keep the last 3D camera with the
+                // shared session instead of dropping it on alternating posts.
+                if (!message.state.camera && canonical?.camera) {
+                    message.state.camera = canonical.camera;
+                }
                 canonical = message.state;
                 latestState.set(from, message.state);
                 saveTreeStateLocal('app', message.state);
@@ -4690,6 +4846,7 @@ async function boot() {
         applySelectionPolicy();
         buildSculptToolbar();
         buildViewMenuProxies();
+        buildCameraMenu();
         applyAutoZoomPrefs();
         bindAnchoredInspector();
         bindRecordChrome();

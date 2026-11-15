@@ -67,6 +67,23 @@ function captureTreeState(app) {
     for (const [key, value] of Object.entries(app.P)) {
         params[key] = cloneParamValue(value);
     }
+    let camera = null;
+    if (app.camera) {
+        camera = {
+            position: [app.camera.position.x, app.camera.position.y, app.camera.position.z],
+            target: [app.camera.target.x, app.camera.target.y, app.camera.target.z],
+        };
+        if (app.camera.fov !== undefined) camera.fov = Number(app.camera.fov);
+        if (app.camera.lookAt) {
+            camera.lookAt = [app.camera.lookAt.x, app.camera.lookAt.y, app.camera.lookAt.z];
+        }
+        if (app.camera.autoLookAt !== undefined) camera.autoLookAt = !!app.camera.autoLookAt;
+        if (app.camera.useLookAtForOrbit !== undefined) {
+            camera.useLookAtForOrbit = !!app.camera.useLookAtForOrbit;
+        }
+        if (app.camera.orbitEnabled !== undefined) camera.orbitEnabled = !!app.camera.orbitEnabled;
+        if (app.camera.limitsEnabled !== undefined) camera.limitsEnabled = !!app.camera.limitsEnabled;
+    }
     return {
         version: TREE_STATE_VERSION,
         dimension: app.dimension,
@@ -81,10 +98,7 @@ function captureTreeState(app) {
         ui: app.ui ? Object.assign({}, app.ui) : { theme: 'auto' },
         exportSettings: app.exportSettings ? Object.assign({}, app.exportSettings) : null,
         compare: app.compare ? Object.assign({}, app.compare) : null,
-        camera: app.camera ? {
-            position: [app.camera.position.x, app.camera.position.y, app.camera.position.z],
-            target: [app.camera.target.x, app.camera.target.y, app.camera.target.z],
-        } : null,
+        camera,
     };
 }
 
