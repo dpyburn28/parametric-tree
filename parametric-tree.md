@@ -825,7 +825,7 @@ Solar/sky/wind/soil helpers, light field v2, forest ecology, obstacles v2, branc
 
 ## 11. First concrete milestone: Fidelity Pass 1
 
-A realistic first slice that improves the look and the workflow without destabilizing the architecture.
+A realistic first slice that improves the look and the workflow without destabilizing the architecture.  
 
 ### Deliverables
 
