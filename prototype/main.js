@@ -37,6 +37,7 @@ import {
     LightField,
     simulate,
     setSeedValue,
+    setSimulationAutomation,
 } from './simulation.js';
 
 'use strict';
@@ -68,6 +69,9 @@ function timeEnd() {
 let time = 0;        // current age in years (render parameter)
 let playing = false;
 let lastFrameTs = 0;
+
+let automation = createAutomation();
+let RP = P;
 
 /** Species & season render state. */
 let leafPalette = 'green';   // 'green' | 'blossom'
@@ -212,11 +216,15 @@ const rgb = (c) => `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
  * angle (near vertical) is day; a large tilt lowers the sun into twilight and
  * then night. The same colors feed the sky, soil and grass.
  */
+function refreshRenderParams() {
+    RP = resolveRenderParams(P, automation, time);
+}
 function updateDayNight() {
-    const sun = environmentSunDirection(P, '2d');
+    refreshRenderParams();
+    const sun = environmentSunDirection(RP, '2d');
     const height = sun.elevation * 180 / Math.PI;
     const t = smoothstep(0, 30, height)
-        * Math.max(0.35, environmentSky(P).exposure);
+        * Math.max(0.35, environmentSky(RP).exposure);
     const root = THEME_ROOT;
     root.dataset.theme = t >= 0.45 ? 'light' : 'dark';
 
@@ -225,7 +233,7 @@ function updateDayNight() {
     let sky2 = mixRgb([22, 32, 44], [246, 240, 220], t);
     sky1 = mixRgb(sky1, [120, 80, 140], low * 0.25);
     sky2 = mixRgb(sky2, [235, 145, 80], low * 0.65);
-    const sky = environmentSky(P);
+    const sky = environmentSky(RP);
     sky1 = mixRgb(sky1, [150, 155, 165], sky.overcast * 0.6);
     sky2 = mixRgb(sky2, [165, 170, 178], sky.overcast * 0.5);
     if (sky.warmth > 0) sky2 = mixRgb(sky2, [240, 170, 110], sky.warmth * 0.22);
@@ -288,7 +296,7 @@ function leafStyle(seas, i, k, node) {
 
     if (ph.leafScale <= 0.02) return null;
     if (!ph.evergreen && ph.leafScale < 0.55 && noise(i, 31 + k) > ph.leafScale * 1.6) return null;
-    const waterScale = 0.75 + 0.25 * environmentWaterGain(P);
+    const waterScale = 0.75 + 0.25 * environmentWaterGain(RP);
     const ageBias = clamp01((time - node.birth) / 40);
     return {
         h: ph.hue + (n1 - 0.5) * 10 + (lightBias - 0.5) * 4 + (ageBias - 0.5) * 5,
@@ -416,8 +424,8 @@ function drawBackground(cam, width, height) {
     ctx.fillStyle = sky; ctx.fillRect(0, 0, width, height);
 
     // Horizon haze from the active sky preset.
-    const haze = environmentSky(P).haze;
-    const fog = clamp01((P.fogDensity || 0) / 0.003);
+    const haze = environmentSky(RP).haze;
+    const fog = clamp01((RP.fogDensity || 0) / 0.003);
     const hazeGrad = ctx.createLinearGradient(0, cam.groundY - 90, 0, cam.groundY);
     hazeGrad.addColorStop(0, 'rgba(235,242,245,0)');
     hazeGrad.addColorStop(1, `rgba(225,235,240,${0.08 + haze * 0.45 + fog * 0.25})`);
@@ -628,7 +636,7 @@ function qualityLeafFactor() {
 /** Subtle render-only wind offset for 2D branches and leaves. */
 function windOffset2D(node) {
     if (P.reducedMotion) return 0;
-    const speed = Math.abs(P.wind || 0) + (P.gustAmp || 0) * 0.35;
+    const speed = Math.abs(RP.wind || 0) + (RP.gustAmp || 0) * 0.35;
     if (speed < 0.001) return 0;
     const phase = (node.pathLength || 0) * 0.02 + (node.axisId || 0) * 0.37;
     const height = Math.min(1, Math.abs(node.y || 0) / 120);
@@ -775,7 +783,7 @@ function drawLeaves(cam) {
         const node = nodes[i];
         const age = gt - node.birth;
         const traits = (treeTraits && treeTraits[node.tree]) || P;
-        const density = (traits.leaves ?? P.leaves) * (childCount[i] === 0 ? 1.4 : 0.6) * qualityLeafFactor();
+        const density = (traits.leaves ?? RP.leaves) * (childCount[i] === 0 ? 1.4 : 0.6) * qualityLeafFactor();
         if (age < 0.8 || gt >= node.death || radius[i] > R0 * 2.4 || noise(i, 1) > density) continue;
 
         const size = Math.min(1, (age - 0.8) / 2) * LEAF;
@@ -1855,7 +1863,7 @@ function buildSvgMarkupNow(options = {}) {
         const node = nodes[i];
         const age = gt - node.birth;
         const traits = (treeTraits && treeTraits[node.tree]) || P;
-        const density = (traits.leaves ?? P.leaves) * (childCount[i] === 0 ? 1.4 : 0.6) * qualityLeafFactor();
+        const density = (traits.leaves ?? RP.leaves) * (childCount[i] === 0 ? 1.4 : 0.6) * qualityLeafFactor();
         if (age < 0.8 || gt >= node.death || radius[i] > R0 * 2.4 || noise(i, 1) > density) continue;
         const size = Math.min(1, (age - 0.8) / 2) * LEAF;
         const rx = Math.max(1.2, size * cam.scale);
@@ -2068,6 +2076,7 @@ function captureAppState() {
         time,
         season,
         seasonAuto,
+        automation,
         activePreset,
         viz,
         compare: analyticsBaseline ? {
@@ -2127,6 +2136,8 @@ function restoreAppState(state, options = {}) {
     time = Math.min(timeEnd(), Math.max(0, state.time ?? time));
     season = state.season ?? season;
     seasonAuto = !!state.seasonAuto;
+    automation = normalizeAutomation(state.automation);
+    setSimulationAutomation(automation);
     if ($('seasonAuto')) $('seasonAuto').checked = seasonAuto;
     activePreset = state.activePreset || 'custom';
     if (state.viz) Object.assign(viz, state.viz);
@@ -2237,6 +2248,8 @@ function updateStats(state) {
 /** Render one frame at the current `time`. */
 function draw() {
     if (!appVisible) return;
+    refreshRenderParams();
+    updateDayNight();
     const width = canvas.clientWidth, height = canvas.clientHeight;
     const state = computeFrameState();
     const bounds = $('zoom').checked ? state : fullBounds;
@@ -2275,7 +2288,13 @@ function resizeCanvas() {
     canvas.width = canvas.clientWidth * dpr;
     canvas.height = canvas.clientHeight * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    draw();
+    const previousSuppress = suppressAutosave;
+    suppressAutosave = true;
+    try {
+        draw();
+    } finally {
+        suppressAutosave = previousSuppress;
+    }
 }
 
 /** Suspend hidden panes and catch them up when they are shown again. */
@@ -2360,6 +2379,7 @@ function notifySimulateEnd() {
 
 /** Re-run the simulation (after a parameter or seed change) and redraw. */
 function regenerate() {
+    setSimulationAutomation(automation);
     if (!appVisible) {
         pendingRegenerate = true;
         return;
@@ -2423,6 +2443,81 @@ function togglePlay() {
 /** Slider DOM references, so presets can push values back into the UI. */
 const paramInputs = {};
 
+function automationKeyForControl(id, node) {
+    if (id && AUTOMATION_META[id]) return id;
+    const pk = node?.closest?.('[data-param-key]')?.dataset?.paramKey;
+    if (pk && AUTOMATION_META[pk]) return pk;
+    return null;
+}
+
+function upsertAutomationKey(key, year, value) {
+    if (!AUTOMATION_META[key]) return;
+    if (!automation.tracks[key]) {
+        automation.tracks[key] = normalizeTrack(key, { keys: [[year, value]], interp: 'smooth', loop: 'none' });
+    } else {
+        const track = automation.tracks[key];
+        const idx = track.keys.findIndex((k) => Math.abs(k[0] - year) < 0.5);
+        if (idx >= 0) track.keys[idx] = [year, value];
+        else track.keys.push([year, value]);
+        track.keys.sort((a, b) => a[0] - b[0]);
+    }
+}
+
+function applyAutomationChange({ regenerate = null } = {}) {
+    setSimulationAutomation(automation);
+    scheduleStateAutosave();
+    const needsRegen = regenerate !== null ? regenerate : hasGrowthTracks(automation);
+    if (needsRegen) scheduleRegenerate(); else draw();
+}
+
+function automationOptions(key, input) {
+    return {
+        meta: AUTOMATION_META[key],
+        getTrack: () => automation.tracks[key] || null,
+        getTime: () => time,
+        getLifespan: () => P.lifespan,
+        getValue: () => {
+            const track = automation.tracks[key];
+            return (track && automation.enabled) ? evaluateTrack(track, time, P[key]) : P[key];
+        },
+        onToggleTrack: (on) => {
+            if (on) {
+                automation.tracks[key] = normalizeTrack(key, { keys: [[time, P[key]]], interp: 'smooth', loop: 'none' });
+            } else {
+                delete automation.tracks[key];
+            }
+            applyAutomationChange();
+        },
+        onAddKey: (year, value) => {
+            upsertAutomationKey(key, year, value);
+            applyAutomationChange({ regenerate: hasGrowthTracks(automation) });
+        },
+        onUpdateKey: (index, year, value) => {
+            const track = automation.tracks[key];
+            if (!track) return;
+            track.keys[index] = [year, value];
+            track.keys.sort((a, b) => a[0] - b[0]);
+            applyAutomationChange({ regenerate: hasGrowthTracks(automation) });
+        },
+        onDeleteKey: (index) => {
+            const track = automation.tracks[key];
+            if (!track) return;
+            track.keys.splice(index, 1);
+            if (!track.keys.length) delete automation.tracks[key];
+            applyAutomationChange();
+        },
+        onOptions: (opts) => {
+            const track = automation.tracks[key];
+            if (!track) return;
+            if (opts.interp) track.interp = opts.interp;
+            if (opts.loop) track.loop = opts.loop;
+            applyAutomationChange();
+        },
+        onSeek: (year) => { setTime(year); },
+        onClear: () => { delete automation.tracks[key]; applyAutomationChange(); },
+    };
+}
+
 /** Build one labelled slider per entry in PARAM_DEFS. */
 function buildParamControls() {
     for (const def of PARAM_DEFS) {
@@ -2435,9 +2530,28 @@ function buildParamControls() {
         const input = wrapper.querySelector('input');
         const valueSpan = wrapper.querySelector('span');
         paramInputs[key] = { input, valueSpan };
+        if (AUTOMATION_META[key]) {
+            wrapper.classList.add('has-auto');
+            const btn = (typeof AutomationUI !== 'undefined' && AutomationUI.createButton)
+                ? AutomationUI.createButton(document, '◆')
+                : document.createElement('button');
+            btn.className = 'auto-btn';
+            btn.type = 'button';
+            btn.textContent = '◆';
+            btn.title = 'Animate this parameter over time';
+            wrapper.appendChild(btn);
+            const opts = automationOptions(key, input);
+            if (typeof AutomationUI !== 'undefined' && AutomationUI.attach) {
+                AutomationUI.attach(btn, key, opts);
+            }
+        }
         input.oninput = (e) => {
             P[key] = +e.target.value;
             valueSpan.textContent = P[key];
+            if (automation.enabled && automation.tracks[key]) {
+                upsertAutomationKey(key, time, P[key]);
+                scheduleStateAutosave();
+            }
             if (key !== 'speed' && key !== 'leaves') {
                 clearPrunes();
                 pruneMarks.length = 0;
@@ -2603,6 +2717,29 @@ function bindLinkedMode() {
     if (APP_BUS) APP_BUS.subscribe(DIMENSION, (event) => handleMessage(event.data));
     else window.addEventListener('message', (event) => handleMessage(event.data));
     postLinkedMessage({ type: 'tree-ready', state: captureAppState() });
+}
+
+function decorateEnvAutomation() {
+    const ids = ['sunAngle', 'wind', 'windDirection', 'gustAmp', 'soilMoisture', 'exposure', 'fogDensity', 'hour', 'dayOfYear'];
+    for (const id of ids) {
+        const input = $(id);
+        if (!input) continue;
+        const row = input.closest('label');
+        if (!row) continue;
+        const key = id;
+        if (!AUTOMATION_META[key]) continue;
+        row.classList.add('has-auto');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'auto-btn';
+        btn.textContent = '◆';
+        btn.title = 'Animate this parameter over time';
+        row.appendChild(btn);
+        const opts = automationOptions(key, input);
+        if (typeof AutomationUI !== 'undefined' && AutomationUI.attach) {
+            AutomationUI.attach(btn, key, opts);
+        }
+    }
 }
 
 /** Expand the standalone canvas to fill the viewport. */
@@ -2901,6 +3038,18 @@ function bindControls() {
         }
     });
     window.addEventListener('resize', resizeCanvas);
+    decorateEnvAutomation();
+    window.addEventListener('input', (e) => {
+        const el = e.target;
+        if (!el || !el.id) return;
+        const key = automationKeyForControl(el.id, el);
+        if (!key) return;
+        if (!automation.enabled || !automation.tracks[key]) return;
+        const value = (el.type === 'checkbox') ? (el.checked ? 1 : 0) : +el.value;
+        if (!Number.isFinite(value)) return;
+        upsertAutomationKey(key, time, value);
+        scheduleStateAutosave();
+    }, true);
 }
 
 /* ==========================================================================
@@ -2957,6 +3106,18 @@ window.__tree2d = {
         updateSeasonLabel();
         draw();
     },
+    getAutomation() { return normalizeAutomation(automation); },
+    setAutomation(next) {
+        automation = normalizeAutomation(next);
+        setSimulationAutomation(automation);
+        applyAutomationChange({ regenerate: false });
+        draw();
+    },
+    applyAutomation(next) {
+        automation = normalizeAutomation(next);
+        setSimulationAutomation(automation);
+        applyAutomationChange({ regenerate: hasGrowthTracks(automation) });
+    },
     resize() { resizeCanvas(); },
     get visible() { return appVisible; },
     setVisible,
@@ -3011,6 +3172,7 @@ window.__tree2d = {
 buildPresetControls();
 buildParamControls();
 bindControls();
+setSimulationAutomation(automation);
 updateDayNight();
 notifySimulateStart();
 simulate();

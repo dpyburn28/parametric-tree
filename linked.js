@@ -1215,6 +1215,7 @@ function buildControlPanel(css2d) {
     decorateSpecies();
     decorateGroups();
     wirePanelControls();
+    wireAutomationButtons();
     syncPanel();
     if (!panelSyncTimer) panelSyncTimer = setInterval(syncPanel, 150);
 }
@@ -1691,6 +1692,106 @@ function wirePanelControls() {
     }
 }
 
+function wireAutomationButtons() {
+    for (const [key, node] of mounted) {
+        const entry = MANIFEST_BY_KEY.get(key);
+        if (!entry) continue;
+        const paramKey = (entry.kind === 'param')
+            ? entry.id
+            : (AUTOMATION_META && AUTOMATION_META[entry.id] ? entry.id : null);
+        if (!paramKey || !AUTOMATION_META[paramKey]) continue;
+        const btn = node.querySelector('.auto-btn');
+        if (!btn) continue;
+        btn.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            openStudioAutomationEditor(btn, paramKey);
+        });
+    }
+}
+
+function applyStudioAutomation(auto) {
+    const normalized = (typeof normalizeAutomation === 'function') ? normalizeAutomation(auto) : auto;
+    if (canonical) canonical.automation = normalized;
+    window.__tree2d?.applyAutomation?.(normalized);
+    window.__tree3d?.applyAutomation?.(normalized);
+    scheduleStateAutosave();
+    syncPanel();
+}
+
+function openStudioAutomationEditor(btn, key) {
+    if (!AUTOMATION_META[key]) return;
+    const opts = {
+        meta: AUTOMATION_META[key],
+        getTrack: () => canonical?.automation?.tracks?.[key] || null,
+        getTime: () => transportTime,
+        getLifespan: () => lifespan,
+        getValue: () => {
+            const track = canonical?.automation?.tracks?.[key];
+            const base = canonical?.params?.[key];
+            return (track && canonical?.automation?.enabled !== false)
+                ? evaluateTrack(track, transportTime, base)
+                : base;
+        },
+        onToggleTrack: (on) => {
+            const auto = normalizeAutomation(canonical?.automation);
+            if (on) {
+                const base = canonical?.params?.[key];
+                auto.tracks[key] = normalizeTrack(key, { keys: [[transportTime, base]], interp: 'smooth', loop: 'none' });
+            } else {
+                delete auto.tracks[key];
+            }
+            applyStudioAutomation(auto);
+        },
+        onAddKey: (year, value) => {
+            const auto = normalizeAutomation(canonical?.automation);
+            if (!auto.tracks[key]) {
+                auto.tracks[key] = normalizeTrack(key, { keys: [[year, value]], interp: 'smooth', loop: 'none' });
+            } else {
+                const track = auto.tracks[key];
+                const idx = track.keys.findIndex((k) => Math.abs(k[0] - year) < 0.5);
+                if (idx >= 0) track.keys[idx] = [year, value];
+                else track.keys.push([year, value]);
+                track.keys.sort((a, b) => a[0] - b[0]);
+            }
+            applyStudioAutomation(auto);
+        },
+        onUpdateKey: (index, year, value) => {
+            const auto = normalizeAutomation(canonical?.automation);
+            const track = auto.tracks[key];
+            if (!track) return;
+            track.keys[index] = [year, value];
+            track.keys.sort((a, b) => a[0] - b[0]);
+            applyStudioAutomation(auto);
+        },
+        onDeleteKey: (index) => {
+            const auto = normalizeAutomation(canonical?.automation);
+            const track = auto.tracks[key];
+            if (!track) return;
+            track.keys.splice(index, 1);
+            if (!track.keys.length) delete auto.tracks[key];
+            applyStudioAutomation(auto);
+        },
+        onOptions: (o) => {
+            const auto = normalizeAutomation(canonical?.automation);
+            const track = auto.tracks[key];
+            if (!track) return;
+            if (o.interp) track.interp = o.interp;
+            if (o.loop) track.loop = o.loop;
+            applyStudioAutomation(auto);
+        },
+        onClear: () => {
+            const auto = normalizeAutomation(canonical?.automation);
+            delete auto.tracks[key];
+            applyStudioAutomation(auto);
+        },
+        onSeek: (year) => { driveTime(year); },
+    };
+    if (typeof AutomationUI !== 'undefined' && AutomationUI.openEditor) {
+        AutomationUI.openEditor(btn, key, opts);
+    }
+}
+
 function syncPanel() {
     if (!panelShadow || !shadow2d || !shadow3d || !mounted.size) return;
 
@@ -1758,6 +1859,10 @@ function syncPanel() {
         if (value && source && value.textContent !== source.textContent) value.textContent = source.textContent;
     }
 
+    for (const [key, node] of mounted) {
+        const btn = node.querySelector('.auto-btn');
+        if (btn) btn.classList.toggle('on', !!canonical?.automation?.tracks?.[key]);
+    }
     updateSpeciesBanner();
     updateDisabledReasons();
     updateDockReadouts();

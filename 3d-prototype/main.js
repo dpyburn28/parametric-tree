@@ -49,6 +49,7 @@ import {
     LightField,
     simulate,
     setSeedValue,
+    setSimulationAutomation,
 } from './simulation.js';
 
 /* ==========================================================================
@@ -92,6 +93,8 @@ let lastFrameTs = 0;
 let leafPalette = 'green';   // 'green' | 'blossom'
 let season = 0.33;           // 0 = spring, 0.33 = summer, 0.66 = autumn, 1 = winter
 let seasonAuto = false;      // cycle one full season every 4 simulated years
+let automation = createAutomation();
+let RP = P;
 let activePreset = 'custom';
 let pruneMode = false;
 let lassoMode = false;
@@ -262,11 +265,15 @@ const rgb = (c) => `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
  * Day/night follows sun elevation instead of the OS color scheme. The same
  * colors drive the CSS sky, ground materials and light intensities.
  */
+function refreshRenderParams() {
+    RP = resolveRenderParams(P, automation, time);
+}
 function updateDayNight() {
-    const sun = environmentSunDirection(P, '3d');
+    refreshRenderParams();
+    const sun = environmentSunDirection(RP, '3d');
     const elevationDeg = sun.elevation * 180 / Math.PI;
     const t = smoothstep(0, 30, elevationDeg)
-        * Math.max(0.35, environmentSky(P).exposure);
+        * Math.max(0.35, environmentSky(RP).exposure);
     const root = THEME_ROOT;
     root.dataset.theme = t >= 0.45 ? 'light' : 'dark';
 
@@ -275,7 +282,7 @@ function updateDayNight() {
     let sky2 = mixRgb([22, 32, 44], [246, 240, 220], t);
     sky1 = mixRgb(sky1, [120, 80, 140], low * 0.25);
     sky2 = mixRgb(sky2, [235, 145, 80], low * 0.65);
-    const sky = environmentSky(P);
+    const sky = environmentSky(RP);
     sky1 = mixRgb(sky1, [150, 155, 165], sky.overcast * 0.6);
     sky2 = mixRgb(sky2, [165, 170, 178], sky.overcast * 0.5);
     if (sky.warmth > 0) sky2 = mixRgb(sky2, [240, 170, 110], sky.warmth * 0.22);
@@ -296,10 +303,10 @@ function updateDayNight() {
     sunLight.color.setRGB(sunColor[0] / 255, sunColor[1] / 255, sunColor[2] / 255, THREE.SRGBColorSpace);
     sunLight.shadow.radius = 4;
     sunLight.shadow.blurSamples = 8;
-    renderer.toneMappingExposure = P.exposure ?? 1;
+    renderer.toneMappingExposure = RP.exposure ?? 1;
     if (scene.fog) {
         scene.fog.color.setRGB(sky2[0] / 255, sky2[1] / 255, sky2[2] / 255, THREE.SRGBColorSpace);
-        scene.fog.density = P.fogDensity ?? 0.0008;
+        scene.fog.density = RP.fogDensity ?? 0.0008;
     }
     updateEnvironmentMap(sky1, sky2, grass);
     syncThemeColors();
@@ -2370,9 +2377,10 @@ function updateLeafMesh(forceFull = false) {
     const { px, py, pz, radius, childCount, present } = frame;
     const seas = currentSeason();
     const gt = growthTime(time);
-    const sun = environmentSunDirection(P, '3d');
+    refreshRenderParams();
+    const sun = environmentSunDirection(RP, '3d');
     const lightYaw = Math.atan2(sun.x, sun.z);
-    const waterDroop = (1 - environmentWaterGain(P)) * 0.25;
+    const waterDroop = (1 - environmentWaterGain(RP)) * 0.25;
     let leafWrite = 0;
     leafNodeIndices = [];
     for (const species of LEAF_SPECIES) {
@@ -2387,7 +2395,7 @@ function updateLeafMesh(forceFull = false) {
         const node = nodes[i];
         const age = gt - node.birth;
         const traits = (treeTraits && treeTraits[node.tree]) || P;
-        const density = (traits.leaves ?? P.leaves) * (childCount[i] === 0 ? 1.4 : 0.6);
+        const density = (traits.leaves ?? RP.leaves) * (childCount[i] === 0 ? 1.4 : 0.6);
         if (age < 0.8 || gt >= node.death || radius[i] > R0 * 2.4 || noise(i, 1) > density) continue;
 
         const species = leafSpeciesFor(node);
@@ -2906,11 +2914,13 @@ function updateShadowCamera(bounds) {
     const cx = (bounds.minX + bounds.maxX) * 0.5;
     const cy = (bounds.maxY || 0) * 0.45;
     const cz = (bounds.minZ + bounds.maxZ) * 0.5;
-    const dir = sunDir();
+    const dir = sunDir(RP);
     const dist = extent * 1.6;
     sunLight.target.position.set(cx, cy, cz);
     sunLight.target.updateMatrixWorld();
     sunLight.position.set(cx + dir.x * dist, cy + dir.y * dist, cz + dir.z * dist);
+    sunLight.userData.center = { x: cx, y: cy, z: cz };
+    sunLight.userData.distance = dist;
 }
 
 /** Look-at point at the centre of the current tree bounds. */
@@ -3033,7 +3043,7 @@ function computeAnalytics() {
             const pipe = pipeSum[i] > 0 ? Math.pow(pipeSum[i], 1 / PN) : R0;
             if (step - node.birth < 0.8 || pipe > R0 * 2.4) continue;
             const traits = (treeTraits && treeTraits[node.tree]) || P;
-            const density = (traits.leaves ?? P.leaves) * (childCount[i] === 0 ? 1.4 : 0.6);
+            const density = (traits.leaves ?? RP.leaves) * (childCount[i] === 0 ? 1.4 : 0.6);
             if (noise(i, 1) > density) continue;
             leafCount += leafCountForShape(traits.leafShape || P.leafShape);
             leafLightSum += node.currentLight ?? node.light ?? 1;
@@ -3396,6 +3406,8 @@ function updateStats(state) {
 
 /** Recompute skeleton state at `time` and update the 3D meshes. */
 function updateSceneFromTime(smoothZoom = false) {
+    refreshRenderParams();
+    updateDayNight();
     const state = computeFrameState();
     updateXrayMode();
     updateIsolation();
@@ -3445,18 +3457,25 @@ function renderFrame() {
 /** Push time, sway, sun and bark state into the custom shader uniforms. */
 function updateShaderUniforms() {
     const t = clock.getElapsedTime();
-    const sun = environmentSunDirection(P, '3d');
-    const windScale = P.swayWithWind ? 1 + Math.abs(P.wind) * 2.5 : 1;
-    const sway = P.sway * windScale;
+    refreshRenderParams();
+    const sun = environmentSunDirection(RP, '3d');
+    const windScale = RP.swayWithWind ? 1 + Math.abs(RP.wind) * 2.5 : 1;
+    const sway = RP.sway * windScale;
     const height = Math.max(fullBounds.maxY, 80);
     const day = smoothstep(0, 30, sun.elevation * 180 / Math.PI)
-        * Math.max(0.35, environmentSky(P).exposure);
+        * Math.max(0.35, environmentSky(RP).exposure);
     const dir = sun;
-    const windDir = P.windDirection * Math.PI / 180;
-    const windSign = P.wind < 0 ? -1 : 1;
+    if (sunLight.userData && sunLight.userData.center) {
+        const c = sunLight.userData.center, d = sunLight.userData.distance;
+        sunLight.target.position.set(c.x, c.y, c.z);
+        sunLight.target.updateMatrixWorld();
+        sunLight.position.set(c.x + dir.x * d, c.y + dir.y * d, c.z + dir.z * d);
+    }
+    const windDir = RP.windDirection * Math.PI / 180;
+    const windSign = RP.wind < 0 ? -1 : 1;
     const windX = Math.cos(windDir) * windSign;
     const windZ = Math.sin(windDir) * windSign;
-    const windStrength = Math.abs(P.wind) + (P.gustAmp || 0) * 0.35;
+    const windStrength = Math.abs(RP.wind) + (RP.gustAmp || 0) * 0.35;
 
     for (const mat of [branchMat, leafMat]) {
         const shader = mat.userData.shader;
@@ -3466,15 +3485,15 @@ function updateShaderUniforms() {
         if (shader.uniforms.uTreeHeight) shader.uniforms.uTreeHeight.value = height;
         if (shader.uniforms.uSunDir) shader.uniforms.uSunDir.value.set(dir.x, dir.y, dir.z);
         if (shader.uniforms.uWetness) shader.uniforms.uWetness.value = clamp01(
-            (P.soilMoisture ?? 0.6) * (0.5 + environmentSky(P).overcast * 0.6)
+            (RP.soilMoisture ?? 0.6) * (0.5 + environmentSky(RP).overcast * 0.6)
         );
-        if (shader.uniforms.uSnow) shader.uniforms.uSnow.value = P.snow ? 0.78 : 0;
+        if (shader.uniforms.uSnow) shader.uniforms.uSnow.value = RP.snow ? 0.78 : 0;
         if (shader.uniforms.uLeafGlow) shader.uniforms.uLeafGlow.value = 0.06 + 0.94 * day;
         if (shader.uniforms.uWindX) shader.uniforms.uWindX.value = windX;
         if (shader.uniforms.uWindZ) shader.uniforms.uWindZ.value = windZ;
         if (shader.uniforms.uWindStrength) shader.uniforms.uWindStrength.value = 0;
         if (shader.uniforms.uGust) shader.uniforms.uGust.value = 0;
-        if (shader.uniforms.uGustFreq) shader.uniforms.uGustFreq.value = P.gustFreq || 0.8;
+        if (shader.uniforms.uGustFreq) shader.uniforms.uGustFreq.value = RP.gustFreq || 0.8;
         if (shader.uniforms.uFlutter) shader.uniforms.uFlutter.value = mat === leafMat ? sway * 0.35 : 0;
     }
     const branchShader = branchMat.userData.shader;
@@ -3492,9 +3511,15 @@ function resizeCanvas() {
     bloomPass.setSize(width, height);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
-    if (!$('zoom').checked) frameCameraToBounds(fullBounds, false);
-    else updateSceneFromTime(false);
-    renderFrame();
+    const previousSuppress = suppressAutosave;
+    suppressAutosave = true;
+    try {
+        if (!$('zoom').checked) frameCameraToBounds(fullBounds, false);
+        else updateSceneFromTime(false);
+        renderFrame();
+    } finally {
+        suppressAutosave = previousSuppress;
+    }
 }
 
 /** Suspend the hidden 3D pane and resume from the shared state when shown. */
@@ -3592,6 +3617,7 @@ function notifySimulateEnd() {
 
 /** Re-run the 3D simulation (after a parameter or seed change) and update meshes. */
 function regenerate() {
+    setSimulationAutomation(automation);
     if (!appVisible) {
         pendingRegenerate = true;
         return;
@@ -3727,6 +3753,81 @@ function animate(ts) {
 /** Slider DOM references, so presets can push values back into the UI. */
 const paramInputs = {};
 
+function automationKeyForControl(id, node) {
+    if (id && AUTOMATION_META[id]) return id;
+    const pk = node?.closest?.('[data-param-key]')?.dataset?.paramKey;
+    if (pk && AUTOMATION_META[pk]) return pk;
+    return null;
+}
+
+function upsertAutomationKey(key, year, value) {
+    if (!AUTOMATION_META[key]) return;
+    if (!automation.tracks[key]) {
+        automation.tracks[key] = normalizeTrack(key, { keys: [[year, value]], interp: 'smooth', loop: 'none' });
+    } else {
+        const track = automation.tracks[key];
+        const idx = track.keys.findIndex((k) => Math.abs(k[0] - year) < 0.5);
+        if (idx >= 0) track.keys[idx] = [year, value];
+        else track.keys.push([year, value]);
+        track.keys.sort((a, b) => a[0] - b[0]);
+    }
+}
+
+function applyAutomationChange({ regenerate = null } = {}) {
+    setSimulationAutomation(automation);
+    scheduleStateAutosave();
+    const needsRegen = regenerate !== null ? regenerate : hasGrowthTracks(automation);
+    if (needsRegen) scheduleRegenerate(); else { updateSceneFromTime(false); drawAnalytics(); }
+}
+
+function automationOptions3d(key, input) {
+    return {
+        meta: AUTOMATION_META[key],
+        getTrack: () => automation.tracks[key] || null,
+        getTime: () => time,
+        getLifespan: () => P.lifespan,
+        getValue: () => {
+            const track = automation.tracks[key];
+            return (track && automation.enabled) ? evaluateTrack(track, time, P[key]) : P[key];
+        },
+        onToggleTrack: (on) => {
+            if (on) {
+                automation.tracks[key] = normalizeTrack(key, { keys: [[time, P[key]]], interp: 'smooth', loop: 'none' });
+            } else {
+                delete automation.tracks[key];
+            }
+            applyAutomationChange();
+        },
+        onAddKey: (year, value) => {
+            upsertAutomationKey(key, year, value);
+            applyAutomationChange({ regenerate: hasGrowthTracks(automation) });
+        },
+        onUpdateKey: (index, year, value) => {
+            const track = automation.tracks[key];
+            if (!track) return;
+            track.keys[index] = [year, value];
+            track.keys.sort((a, b) => a[0] - b[0]);
+            applyAutomationChange({ regenerate: hasGrowthTracks(automation) });
+        },
+        onDeleteKey: (index) => {
+            const track = automation.tracks[key];
+            if (!track) return;
+            track.keys.splice(index, 1);
+            if (!track.keys.length) delete automation.tracks[key];
+            applyAutomationChange();
+        },
+        onOptions: (opts) => {
+            const track = automation.tracks[key];
+            if (!track) return;
+            if (opts.interp) track.interp = opts.interp;
+            if (opts.loop) track.loop = opts.loop;
+            applyAutomationChange();
+        },
+        onSeek: (year) => { setTime(year); },
+        onClear: () => { delete automation.tracks[key]; applyAutomationChange(); },
+    };
+}
+
 /** Build one labelled slider per entry in PARAM_DEFS. */
 function buildParamControls() {
     for (const def of PARAM_DEFS) {
@@ -3739,9 +3840,28 @@ function buildParamControls() {
         const input = wrapper.querySelector('input');
         const valueSpan = wrapper.querySelector('span');
         paramInputs[key] = { input, valueSpan };
+        if (AUTOMATION_META[key]) {
+            wrapper.classList.add('has-auto');
+            const btn = (typeof AutomationUI !== 'undefined' && AutomationUI.createButton)
+                ? AutomationUI.createButton(document, '◆')
+                : document.createElement('button');
+            btn.className = 'auto-btn';
+            btn.type = 'button';
+            btn.textContent = '◆';
+            btn.title = 'Animate this parameter over time';
+            wrapper.appendChild(btn);
+            const opts = automationOptions3d(key, input);
+            if (typeof AutomationUI !== 'undefined' && AutomationUI.attach) {
+                AutomationUI.attach(btn, key, opts);
+            }
+        }
         input.oninput = (e) => {
             P[key] = +e.target.value;
             valueSpan.textContent = P[key];
+            if (automation.enabled && automation.tracks[key]) {
+                upsertAutomationKey(key, time, P[key]);
+                scheduleStateAutosave();
+            }
             if (key !== 'speed' && key !== 'leaves') {
                 clearPrunes();
                 pruneMarks.length = 0;
@@ -4520,6 +4640,7 @@ function captureAppState() {
         time,
         season,
         seasonAuto,
+        automation,
         activePreset,
         viz,
         compare: analyticsBaseline ? {
@@ -4588,6 +4709,8 @@ function restoreAppState(state, options = {}) {
     time = Math.min(timeEnd(), Math.max(0, state.time ?? time));
     season = state.season ?? season;
     seasonAuto = !!state.seasonAuto;
+    automation = normalizeAutomation(state.automation);
+    setSimulationAutomation(automation);
     if ($('seasonAuto')) $('seasonAuto').checked = seasonAuto;
     activePreset = state.activePreset || 'custom';
     if (state.viz) Object.assign(viz, state.viz);
@@ -5110,6 +5233,41 @@ function bindControls() {
         }
     });
     window.addEventListener('resize', resizeCanvas);
+    decorateEnvAutomation3d();
+    window.addEventListener('input', (e) => {
+        const el = e.target;
+        if (!el || !el.id) return;
+        const key = automationKeyForControl(el.id, el);
+        if (!key) return;
+        if (!automation.enabled || !automation.tracks[key]) return;
+        const value = (el.type === 'checkbox') ? (el.checked ? 1 : 0) : +el.value;
+        if (!Number.isFinite(value)) return;
+        upsertAutomationKey(key, time, value);
+        scheduleStateAutosave();
+    }, true);
+}
+
+function decorateEnvAutomation3d() {
+    const ids = ['sunAzimuth', 'sunElevation', 'wind', 'windDirection', 'gustAmp', 'sway', 'soilMoisture', 'exposure', 'fogDensity', 'hour', 'dayOfYear'];
+    for (const id of ids) {
+        const input = $(id);
+        if (!input) continue;
+        const row = input.closest('label');
+        if (!row) continue;
+        const key = id;
+        if (!AUTOMATION_META[key]) continue;
+        row.classList.add('has-auto');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'auto-btn';
+        btn.textContent = '◆';
+        btn.title = 'Animate this parameter over time';
+        row.appendChild(btn);
+        const opts = automationOptions3d(key, input);
+        if (typeof AutomationUI !== 'undefined' && AutomationUI.attach) {
+            AutomationUI.attach(btn, key, opts);
+        }
+    }
 }
 
 /* ==========================================================================
@@ -5173,6 +5331,18 @@ window.__tree3d = {
         seasonAuto = false;
         updateSeasonLabel();
         updateSceneFromTime(false);
+    },
+    getAutomation() { return normalizeAutomation(automation); },
+    setAutomation(next) {
+        automation = normalizeAutomation(next);
+        setSimulationAutomation(automation);
+        applyAutomationChange({ regenerate: false });
+        updateSceneFromTime(false);
+    },
+    applyAutomation(next) {
+        automation = normalizeAutomation(next);
+        setSimulationAutomation(automation);
+        applyAutomationChange({ regenerate: hasGrowthTracks(automation) });
     },
     captureGrid(width = 80, height = 50) {
         renderer.render(scene, camera);
@@ -5254,6 +5424,7 @@ syncThemeColors();
 buildPresetControls();
 buildParamControls();
 bindControls();
+setSimulationAutomation(automation);
 updateDayNight();
 notifySimulateStart();
 simulate();

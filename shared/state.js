@@ -8,7 +8,7 @@
 
 'use strict';
 
-const TREE_STATE_VERSION = 2;
+const TREE_STATE_VERSION = 3;
 const TREE_STATE_LOCAL_PREFIX = 'parametric-tree-state';
 
 /**
@@ -27,6 +27,14 @@ const TREE_STATE_MIGRATIONS = {
             ? next.exportSettings
             : null;
         next.compare = next.compare && typeof next.compare === 'object' ? next.compare : null;
+        return next;
+    },
+    2(state) {
+        const next = Object.assign({}, state);
+        next.version = 3;
+        if (!next.automation || typeof next.automation !== 'object') {
+            next.automation = { version: 1, enabled: true, tracks: {} };
+        }
         return next;
     },
 };
@@ -99,6 +107,13 @@ function captureTreeState(app) {
         exportSettings: app.exportSettings ? Object.assign({}, app.exportSettings) : null,
         compare: app.compare ? Object.assign({}, app.compare) : null,
         camera,
+        automation: app.automation && typeof app.automation === 'object'
+            ? Object.assign({}, app.automation, {
+                tracks: app.automation.tracks && typeof app.automation.tracks === 'object'
+                    ? Object.assign({}, app.automation.tracks)
+                    : {},
+            })
+            : { version: 1, enabled: true, tracks: {} },
     };
 }
 

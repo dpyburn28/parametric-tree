@@ -96,6 +96,12 @@ export const P = Object.assign({}, BASE_PARAMS, DIMENSION_PARAMS_3D, {
     reducedMotion: prefersReducedMotion,
 });
 
+let _automationState = (typeof createAutomation === 'function') ? createAutomation() : { version: 1, enabled: true, tracks: {} };
+export function setSimulationAutomation(next) {
+    _automationState = (typeof normalizeAutomation === 'function') ? normalizeAutomation(next) : next;
+}
+export function getSimulationAutomation() { return _automationState; }
+
 /* ==========================================================================
    ! 2. STATE
    ========================================================================== */
@@ -239,8 +245,8 @@ export function clearPrunes() {
    ========================================================================== */
 
 /** Unit vector from a point toward the sun (3D, +y up). */
-export function sunDir() {
-    return environmentSunDirection(P, '3d');
+export function sunDir(params = P) {
+    return environmentSunDirection(params, '3d');
 }
 
 /** Active obstacle description, or null when disabled. */
@@ -313,7 +319,7 @@ export function rootPositions() {
  * in the 3x3 column of voxels above it (+Y).
  */
 export class LightField {
-    constructor() { this.counts = new Map(); }
+    constructor(params = P) { this.counts = new Map(); this.params = params || P; }
 
     _key(i, j, k) {
         return ((i + 2048) * 4096 + (j + 2048)) * 4096 + (k + 2048);
@@ -347,13 +353,14 @@ export class LightField {
     }
 
     /** @returns {number} light level in (0, 1]; 1 = full sun. */
-    lightAt(x, y, z) {
+    lightAt(x, y, z, params = this.params) {
+        const p = params || this.params || P;
         const ci = Math.floor(x / LIGHT_CELL);
         const cj = Math.floor(y / LIGHT_CELL);
         const ck = Math.floor(z / LIGHT_CELL);
-        const dir = sunDir();
+        const dir = sunDir(p);
         const { ux, uy, uz, vx, vy, vz } = perpBasis(dir.x, dir.y, dir.z);
-        const samples = sunSampleOffsets(P.sunSamples || 3);
+        const samples = sunSampleOffsets(p.sunSamples || 3);
         let shade = 0;
         for (const sample of samples) {
             const sx = dir.x + ux * sample * 0.16;
@@ -374,10 +381,10 @@ export class LightField {
             }
         }
         shade /= samples.length;
-        const sky = P.skyLight ?? 0.14;
-        const direct = Math.exp(-P.shade * 0.34 * shade);
-        const intensity = Math.max(0.3, environmentSunIntensity(P, dir));
-        const gain = environmentSlopeGain(P, dir.azimuth || 0);
+        const sky = p.skyLight ?? 0.14;
+        const direct = Math.exp(-(p.shade ?? P.shade) * 0.34 * shade);
+        const intensity = Math.max(0.3, environmentSunIntensity(p, dir));
+        const gain = environmentSlopeGain(p, dir.azimuth || 0);
         return Math.max(0.02, Math.min(1,
             (sky + (1 - sky) * direct * intensity) * gain
         ));
@@ -419,7 +426,7 @@ export function seedObstacleShade(field) {
 
 /** Grow the whole 3D tree from a seed and store the skeleton in `nodes`. */
 export function simulate() {
-    const lightField = new LightField();
+    const lightField = new LightField(P);
     const roots = rootPositions();
     for (const root of roots) {
         root.y = environmentGroundHeight(P, root.x, root.z);
@@ -467,12 +474,17 @@ export function simulate() {
     for (let step = 0; step < steps; step++) {
         // Buds created this year are appended and must not grow until next year,
         // so only iterate over the buds that existed when the year began.
+        const year = displayYearForStep(step, P.lifespan);
+        const epoch = growthOverlay(_automationState, year);
+        const ep = epoch ? mergeParams(P, epoch) : P;
+        lightField.params = ep;
         const activeCount = buds.length;
-        for (let i = 0; i < activeCount; i++) growBud(buds[i], step, lightField, buds);
+        for (let i = 0; i < activeCount; i++) growBud(buds[i], step, lightField, buds, epoch);
 
-        const shed = shedShadedBranches(step, lightField);
+        const shed = shedShadedBranches(step, lightField, ep);
         buds = buds.filter((b) => !b.dead && !shed[b.tipNode]);
     }
+    lightField.params = P;
 
     computeMechanicalLoad();
     computeCurrentLight();
@@ -488,7 +500,7 @@ export function simulate() {
  * @param {LightField} lightField
  * @param {Bud[]} buds        Bud list; new lateral buds are appended to it.
  */
-export function growBud(bud, step, lightField, buds) {
+export function growBud(bud, step, lightField, buds, epoch = null) {
     if (bud.dead || step < bud.start) return;
     const cut = prunedCuts.get(bud.id + ':' + step);
     if (cut) {
@@ -505,11 +517,13 @@ export function growBud(bud, step, lightField, buds) {
     if (nodes.length >= MAX_NODES) { bud.dead = true; return; } // hard skeleton cap
 
     const tip = nodes[bud.tipNode];
-    const t = bud.traits || P;
+    const baseTraits = bud.traits || P;
+    const t = epoch ? mergeParams(baseTraits, epoch) : baseTraits;
+    const ep = epoch ? mergeParams(P, epoch) : P;
     const rand = (channel) => hashRandom(bud.id, step, channel);
     const isLateral = bud.order > 0;
-    const light = isLateral ? lightField.lightAt(tip.x, tip.y, tip.z) : 1; // trunk is never shaded
-    const wind = environmentWind(P, tip.x, tip.y, tip.z, step, treeRoots);
+    const light = isLateral ? lightField.lightAt(tip.x, tip.y, tip.z, ep) : 1; // trunk is never shaded
+    const wind = environmentWind(ep, tip.x, tip.y, tip.z, step, treeRoots);
 
     // Deep shade: lateral buds may die before growing.
     if (isLateral && light < SHADE_KILL_LIGHT && rand(9) < 0.5) { bud.dead = true; return; }
@@ -521,7 +535,7 @@ export function growBud(bud, step, lightField, buds) {
         : 1;
     const windStress = Math.min(1, wind.speed * (t.windTaper ?? P.windTaper ?? 0));
     const length = BASE * orderFactor * ageFactor
-        * environmentWaterGain(P) * (1 - windStress * 0.2);
+        * environmentWaterGain(ep) * (1 - windStress * 0.2);
 
     // Direction = previous direction + 3D random jitter + wind + phototropism + droop.
     const jitter = (isLateral ? 0.45 : 0.2) * (0.6 + (t.tortuosity || 0) * 0.9);
@@ -637,21 +651,21 @@ export function growBud(bud, step, lightField, buds) {
     if (bud.leader && step >= TRUNK_MIN_AGE) {
         bud.vigor *= 1 - t.sympodial * 0.03;
         if (bud.leaderDepth < 2 && rand(20) < t.sympodial * 0.15) {
-            bifurcateLeader(bud, step, index, dx, dy, dz, buds);
+            bifurcateLeader(bud, step, index, dx, dy, dz, buds, epoch);
             bud.dead = true;
             return;
         }
     }
 
-    spawnLaterals(bud, step, index, dx, dy, dz, light, buds);
+    spawnLaterals(bud, step, index, dx, dy, dz, light, buds, epoch);
 }
 
 /**
  * Replace a leader bud with two co-dominant scaffold limbs, ending the single
  * vertical axis and starting a spreading crown.
  */
-export function bifurcateLeader(bud, step, index, dx, dy, dz, buds) {
-    const t = bud.traits || P;
+export function bifurcateLeader(bud, step, index, dx, dy, dz, buds, epoch = null) {
+    const t = epoch ? mergeParams(bud.traits || P, epoch) : (bud.traits || P);
     const rand = (channel) => hashRandom(bud.id, step, channel);
     const { ux, uy, uz, vx, vy, vz } = perpBasis(dx, dy, dz);
     const roll = bud.phyllotaxis;
@@ -695,8 +709,8 @@ export function bifurcateLeader(bud, step, index, dx, dy, dz, buds) {
 }
 
 /** Possibly create lateral buds at the node `index` the bud just produced. */
-export function spawnLaterals(bud, step, index, dx, dy, dz, light, buds) {
-    const t = bud.traits || P;
+export function spawnLaterals(bud, step, index, dx, dy, dz, light, buds, epoch = null) {
+    const t = epoch ? mergeParams(bud.traits || P, epoch) : (bud.traits || P);
     const minAge = bud.order ? LATERAL_MIN_AGE : TRUNK_MIN_AGE;
     if (bud.age < minAge || nodes.length >= MAX_NODES) return;
 
@@ -764,7 +778,7 @@ export function spawnLaterals(bud, step, index, dx, dy, dz, light, buds) {
             segmentIndex: 0,
             pathLength: nodes[index].pathLength,
             budType: bud.order === 0 ? 1 : 2,
-            tree: bud.tree, species: bud.species, traits: t,
+            tree: bud.tree, species: bud.species, traits: bud.traits || P,
             vigor,
             age: 0,
             start: step + 1 + Math.floor(rand(10 + si) * 2),                       // 0 to 1 year delay
@@ -872,9 +886,9 @@ export function spawnCutRegrowth(bud, step, cut, buds) {
  * so one forward pass is enough).
  * @returns {Uint8Array} flags: 1 where a node was shed this year.
  */
-export function shedShadedBranches(step, lightField) {
+export function shedShadedBranches(step, lightField, params = P) {
     const shed = new Uint8Array(nodes.length);
-    if (P.shed <= 0 || step < SHED_MIN_STEP) return shed;
+    if ((params.shed ?? P.shed) <= 0 || step < SHED_MIN_STEP) return shed;
 
     for (let i = 1; i < nodes.length; i++) {
         const node = nodes[i];
@@ -883,7 +897,7 @@ export function shedShadedBranches(step, lightField) {
         let dies = shed[node.parent] === 1;                  // inherits parent's fate
         if (!dies && !node.isLeader && node.isBranchRoot && step + 1 - node.birth >= SHED_MIN_BRANCH_AGE) {
             const tip = nodes[node.mainTip];
-            dies = lightField.lightAt(tip.x, tip.y, tip.z) < P.shed * 0.3;
+            dies = lightField.lightAt(tip.x, tip.y, tip.z, params) < (params.shed ?? P.shed) * 0.3;
         }
         if (dies) {
             shed[i] = 1;
