@@ -431,7 +431,7 @@ Each phase ends with all existing tests passing, the studio fully usable, and up
 ### Automated (extend `tests/app-ui.js` and add suites)
 
 - **Manifest:** every cloned control is mounted exactly once; none orphaned or duplicated; every control has a scope chip and group.
-- **Layout vs active pane:** layout switch changes visibility only; clicking a pane and keys `1`, `2` set the active pane; Focus layouts force it.
+- **Layout vs active pane:** the layout switch changes visibility and suspends the hidden engine; clicking a pane and keys `1`, `2` set the active pane; Focus layouts force it.
 - **Dock:** play, step, rewind, speed, lifespan (clears cuts, shows note), season and phenology, scrub keyboard behavior, sync chip transitions.
 - **Record controller (unit, fake clock):** time mapping, all easings, holds, loop, ping-pong, season sweep, turntable, pause and resume, abort and restore of prior state, determinism (same settings give the same sampled times).
 - **Record stage (UI):** armed to countdown to running to complete; chrome hidden during run; Esc aborts; cursor hidden; frame aspect ratios; overlays present.

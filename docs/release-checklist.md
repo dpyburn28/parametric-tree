@@ -33,7 +33,7 @@ node tests/visual-regression.js --update
 - [ ] `index.html` boots both panes without iframes or console errors.
 - [ ] The four-mode rail switches Grow / Sculpt / Study / Deliver; clicking the active mode collapses the flyout.
 - [ ] Every control carries a scope chip and inline help popover; no control appears twice.
-- [ ] Layout `Split` / `2D` / `3D` changes visibility only; clicking a pane or pressing `1` / `2` sets the acting view.
+- [ ] Layout `Split` / `2D` / `3D` hides the unused pane and suspends its rendering/simulation; switching back catches it up from the shared state. Clicking a pane or pressing `1` / `2` sets the acting view.
 - [ ] Canvas-bound actions (prune, lasso, isolate, capture before, export) target only the acting pane.
 - [ ] Shared edits update both panes; time, season, seed, lifespan, and cuts stay in sync.
 - [ ] Dock: play/pause, step ±1 (Shift ±10), rewind, editable age, season band, stage labels, lifespan/speed/season popovers and sync chip.

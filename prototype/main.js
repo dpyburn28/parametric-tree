@@ -101,6 +101,9 @@ let applyingRemote = false;
 let fullscreenActive = false;
 let fullscreenUiHidden = false;
 let autosaveTimer = 0;
+let appVisible = true;
+let pendingRegenerate = false;
+let suppressAutosave = false;
 
 /** Approximate world-space area of one rendered 2D leaf card. */
 const LEAF_CARD_AREA_2D = 8;
@@ -2077,6 +2080,7 @@ function captureAppState() {
 }
 
 function scheduleStateAutosave() {
+    if (!appVisible || suppressAutosave) return;
     if (applyingRemote) return;
     if (APP_BUS && window.__TREE_APP_BOOTING__) return;
     if (APP_BUS) APP_BUS.noteLocalChange(DIMENSION);
@@ -2232,6 +2236,7 @@ function updateStats(state) {
 
 /** Render one frame at the current `time`. */
 function draw() {
+    if (!appVisible) return;
     const width = canvas.clientWidth, height = canvas.clientHeight;
     const state = computeFrameState();
     const bounds = $('zoom').checked ? state : fullBounds;
@@ -2265,11 +2270,38 @@ function draw() {
 
 /** Match the canvas backing store to its CSS size and device pixel ratio. */
 function resizeCanvas() {
+    if (!appVisible) return;
     const dpr = window.devicePixelRatio || 1;
     canvas.width = canvas.clientWidth * dpr;
     canvas.height = canvas.clientHeight * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     draw();
+}
+
+/** Suspend hidden panes and catch them up when they are shown again. */
+function setVisible(visible) {
+    const next = !!visible;
+    if (next === appVisible) {
+        if (next && pendingRegenerate) regenerate();
+        return;
+    }
+    appVisible = next;
+    if (!appVisible) {
+        if (playing) setPlaying(false);
+        if (autosaveTimer) {
+            clearTimeout(autosaveTimer);
+            autosaveTimer = 0;
+        }
+        return;
+    }
+    const previousSuppress = suppressAutosave;
+    suppressAutosave = true;
+    try {
+        if (pendingRegenerate) regenerate();
+        else resizeCanvas();
+    } finally {
+        suppressAutosave = previousSuppress;
+    }
 }
 
 /* ==========================================================================
@@ -2328,6 +2360,11 @@ function notifySimulateEnd() {
 
 /** Re-run the simulation (after a parameter or seed change) and redraw. */
 function regenerate() {
+    if (!appVisible) {
+        pendingRegenerate = true;
+        return;
+    }
+    pendingRegenerate = false;
     notifySimulateStart();
     try {
         simulate();
@@ -2355,7 +2392,7 @@ function setPlaying(on) {
 }
 
 function tick(ts) {
-    if (!playing) return;
+    if (!playing || !appVisible) return;
     const dt = Math.min(0.1, (ts - lastFrameTs) / 1000); // clamp to survive tab switches
     lastFrameTs = ts;
     time += dt * P.speed;
@@ -2921,6 +2958,20 @@ window.__tree2d = {
         draw();
     },
     resize() { resizeCanvas(); },
+    get visible() { return appVisible; },
+    setVisible,
+    flushState() {
+        if (autosaveTimer) {
+            clearTimeout(autosaveTimer);
+            autosaveTimer = 0;
+        }
+        const state = captureAppState();
+        if (LINKED_MODE && !applyingRemote) {
+            saveTreeStateLocal(DIMENSION, state);
+            postLinkedMessage({ type: 'tree-state', state });
+        }
+        return state;
+    },
     get selectedNode() { return selectedNode; },
     get selectionEnabled() { return selectionEnabled; },
     clearSelection,

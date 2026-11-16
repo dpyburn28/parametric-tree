@@ -93,6 +93,8 @@ let fullscreenPane = null;
 let fullscreenUiHidden = false;
 let stateLoadWarning = '';
 let lastPreset = 'oak';
+let appStateClearing = false;
+const suspendedPanes = new Set();
 let deliverTab = 'record';
 let deliverTarget = 'svg';
 let studyOpen = prefs.studyOpen;
@@ -1912,6 +1914,49 @@ function setMode(nextMode, { openFlyout = true } = {}) {
     savePrefs();
 }
 
+function setPaneSuspended(dimension, suspended) {
+    const bridge = dimension === '3d' ? window.__tree3d : window.__tree2d;
+    const wasSuspended = suspendedPanes.has(dimension);
+    if (suspended) {
+        const hadPendingState = pendingLocalState.has(dimension);
+        suspendedPanes.add(dimension);
+        pendingLocalState.delete(dimension);
+        if (!wasSuspended && !booting && hadPendingState) {
+            try {
+                bridge?.flushState?.();
+            } catch (error) {
+                console.warn(`Could not flush the ${dimension} view before suspending it:`, error);
+            }
+        }
+        bridge?.setVisible?.(false);
+        return;
+    }
+    if (!wasSuspended) return;
+    suspendedPanes.delete(dimension);
+    pendingLocalState.delete(dimension);
+    if (canonical) {
+        try {
+            bridge?.restoreState?.(canonical);
+        } catch (error) {
+            console.warn(`Could not refresh the suspended ${dimension} view:`, error);
+        }
+    }
+    bridge?.setVisible?.(true);
+}
+
+/** Whether a pane is actually on screen, accounting for focus and phone layouts. */
+function paneIsShown(dimension) {
+    if (layout === '3d') return dimension === '3d';
+    if (layout === '2d') return dimension === '2d';
+    if (isPhone()) return dimension === activePane;
+    return true;
+}
+
+function syncPaneVisibility() {
+    setPaneSuspended('2d', !paneIsShown('2d'));
+    setPaneSuspended('3d', !paneIsShown('3d'));
+}
+
 function setLayout(nextLayout, { fromUser = true } = {}) {
     if (!['split', '2d', '3d'].includes(nextLayout)) return;
     layout = nextLayout;
@@ -1922,6 +1967,7 @@ function setLayout(nextLayout, { fromUser = true } = {}) {
     }
     if (layout === '2d') activePane = '2d';
     if (layout === '3d') activePane = '3d';
+    syncPaneVisibility();
     updateActivePaneChrome();
     if (isPhone()) {
         document.body.classList.remove('mobile-pane-2d', 'mobile-pane-3d');
@@ -1942,6 +1988,7 @@ function setActivePane(dimension, { silent = false } = {}) {
         document.body.classList.remove('mobile-pane-2d', 'mobile-pane-3d');
         document.body.classList.add(`mobile-pane-${activePane}`);
     }
+    syncPaneVisibility();
     window.__TREE_ACTIVE_PANE__ = activePane;
     if (!silent) {
         if (previousPane !== activePane) {
@@ -1951,7 +1998,7 @@ function setActivePane(dimension, { silent = false } = {}) {
         updateAnchoredInspector();
         syncPanel();
     }
-    savePrefs();
+    if (!booting) savePrefs();
 }
 
 function updateActivePaneChrome() {
@@ -2156,8 +2203,8 @@ function driveTime(nextTime, { updateState = true } = {}) {
     transportTime = Math.min(lifespan + 1, Math.max(0, nextTime));
     if (updateState && canonical) canonical.time = transportTime;
     timeSlider.value = String(transportTime);
-    if (window.__tree2d) window.__tree2d.setTime(transportTime);
-    if (window.__tree3d) window.__tree3d.setTime(transportTime);
+    if (window.__tree2d && !suspendedPanes.has('2d')) window.__tree2d.setTime(transportTime);
+    if (window.__tree3d && !suspendedPanes.has('3d')) window.__tree3d.setTime(transportTime);
     updateDockReadouts();
     if (studyOpen && mode === 'study') drawStudyChart();
 }
@@ -2314,8 +2361,8 @@ function resizeViewsSoon() {
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
             window.dispatchEvent(new Event('resize'));
-            window.__tree2d?.resize?.();
-            window.__tree3d?.resize?.();
+            if (!suspendedPanes.has('2d')) window.__tree2d?.resize?.();
+            if (!suspendedPanes.has('3d')) window.__tree3d?.resize?.();
         });
     });
 }
@@ -3819,10 +3866,10 @@ function recordTick(now) {
     if (recordState !== 'running' || recordPaused) return;
     recordElapsed = Math.max(0, (now - recordStartedAt) / 1000);
     const sample = sampleTake(recordSettings, recordElapsed, lifespan);
-    window.__tree2d?.setSeasonSilent?.(sample.season);
-    window.__tree3d?.setSeasonSilent?.(sample.season);
+    if (!suspendedPanes.has('2d')) window.__tree2d?.setSeasonSilent?.(sample.season);
+    if (!suspendedPanes.has('3d')) window.__tree3d?.setSeasonSilent?.(sample.season);
     driveTime(sample.time);
-    if (recordSettings.camera === 'turntable' && recordCameraBase) {
+    if (recordSettings.camera === 'turntable' && recordCameraBase && !suspendedPanes.has('3d')) {
         window.__tree3d?.setCameraPose?.(orbitPose(recordCameraBase, sample.cameraAngle));
     }
     updateRecordOverlay(sample.time, sample.season);
@@ -3926,10 +3973,10 @@ function startRecordPreview() {
         if (recordState !== 'running') return;
         recordElapsed = (now - recordStartedAt) / 1000;
         const sample = sampleTake(recordSettings, recordElapsed, lifespan);
-        window.__tree2d?.setSeasonSilent?.(sample.season);
-        window.__tree3d?.setSeasonSilent?.(sample.season);
+        if (!suspendedPanes.has('2d')) window.__tree2d?.setSeasonSilent?.(sample.season);
+        if (!suspendedPanes.has('3d')) window.__tree3d?.setSeasonSilent?.(sample.season);
         driveTime(sample.time);
-        if (recordSettings.camera === 'turntable' && recordCameraBase) {
+        if (recordSettings.camera === 'turntable' && recordCameraBase && !suspendedPanes.has('3d')) {
             window.__tree3d?.setCameraPose?.(orbitPose(recordCameraBase, sample.cameraAngle));
         }
         if (sample.phase === 'complete' && recordSettings.loop === 'once') {
@@ -4138,6 +4185,11 @@ function closeResetDialog() {
  * the tour-seen flag. Returns a clean URL; the caller performs navigation.
  */
 function clearStoredAppState() {
+    // Stop both engines before clearing so an in-flight autosave cannot
+    // recreate the state we are deleting.
+    appStateClearing = true;
+    window.__tree2d?.setVisible?.(false);
+    window.__tree3d?.setVisible?.(false);
     let tourSeen = false;
     try {
         tourSeen = !!JSON.parse(localStorage.getItem(UI_PREFS_KEY) || '{}').tourSeen;
@@ -4440,7 +4492,7 @@ const appBus = {
                 }
                 canonical = message.state;
                 latestState.set(from, message.state);
-                saveTreeStateLocal('app', message.state);
+                if (!appStateClearing) saveTreeStateLocal('app', message.state);
                 syncTransportFromState();
                 syncPanel();
                 if (studyOpen && mode === 'study') {
@@ -4452,6 +4504,7 @@ const appBus = {
             for (const [dimension, handler] of busListeners) {
                 if (dimension === from) continue;
                 if (pendingLocalState.has(dimension)) continue;
+                if (suspendedPanes.has(dimension)) continue;
                 handler({ data: outbound });
             }
             setStatus('Synced');
@@ -4468,7 +4521,7 @@ const appBus = {
             }
             if ('season' in message.patch) {
                 for (const [dimension, handler] of busListeners) {
-                    if (dimension !== from) handler({ data: message });
+                    if (dimension !== from && !suspendedPanes.has(dimension)) handler({ data: message });
                 }
             }
             return;
@@ -4480,7 +4533,9 @@ const appBus = {
             const other = from === '2d' ? latestState.get('3d') : latestState.get('2d');
             if (other) {
                 for (const [dimension, handler] of busListeners) {
-                    if (dimension !== from) handler({ data: { type: 'tree-apply-state', state: other } });
+                    if (dimension !== from && !suspendedPanes.has(dimension)) {
+                        handler({ data: { type: 'tree-apply-state', state: other } });
+                    }
                 }
             }
         }
@@ -4646,10 +4701,8 @@ function bindHeaderAndRail() {
     }, { passive: true });
 
     window.addEventListener('resize', () => {
-        if (isPhone()) {
-            document.body.classList.remove('layout-2d', 'layout-3d');
-            document.body.classList.add('layout-split');
-        }
+        if (isPhone() && layout !== 'split') setLayout('split', { fromUser: false });
+        syncPaneVisibility();
         const mobile = isDrawerMobile();
         if (mobile !== panelWasMobile) {
             panelWasMobile = mobile;

@@ -26,7 +26,7 @@ Parametric Tree is a browser-based procedural tree studio. A deterministic simul
 The **Stage + dock** redesign in [`ui-ux-redesign-plan.md`](ui-ux-redesign-plan.md) is implemented in the studio:
 
 - **Mode rail + one flyout:** Grow, Sculpt, Study and Deliver replace the flat control rail. Every cloned control is described in `studio/manifest.js` and re-parented exactly once.
-- **Stage:** Split, 2D-focus and 3D-focus layouts are separate from the acting view. The acting pane uses a 2px accent border and an “Acting here” chip; inactive panes show “Linked”.
+- **Stage:** Split, 2D-focus and 3D-focus layouts are separate from the acting view. The acting pane uses a 2px accent border and an “Acting here” chip; inactive panes show “Linked”. Focus layouts and phone pane switches suspend the hidden engine; it catches up from the shared state when shown again.
 - **Transport dock:** persistent play/step/rewind, an editable age readout, a season-banded scrubber with stage labels, lifespan/speed/season popovers, sync status and a simulate progress sliver.
 - **Grow:** species cards, Spread/Bushiness/Leafiness essentials, seed row, grouped Shape, grouped Environment with scope chips, collapsed Planting.
 - **Sculpt:** tool flyout, floating toolbar, canvas hint strip, anchored inspector, renamed Capture before / Show ghost.
@@ -847,7 +847,7 @@ Studio and standalone support:
 | `Cmd/Ctrl+K` | Open the command palette |
 | `?` | Open the keyboard shortcuts overlay |
 
-Shortcuts are surfaced in the header `?` overlay and the Project menu. In the redesigned studio, `1`/`2` set the acting view, while the header layout switch (`Split` / `2D` / `3D`) changes only what is visible.
+Shortcuts are surfaced in the header `?` overlay and the Project menu. In the redesigned studio, `1`/`2` set the acting view, while the header layout switch (`Split` / `2D` / `3D`) changes only what is visible and suspends the hidden engine until it is shown again.
 
 ### 7.10 Persistence and export flows
 

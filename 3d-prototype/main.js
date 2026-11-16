@@ -128,6 +128,10 @@ let autoSlowFrames = 0;
 let autoFastFrames = 0;
 let perfHudVisible = false;
 let lastAnimateTs = 0;
+let animationHandle = 0;
+let appVisible = true;
+let pendingRegenerate = false;
+let suppressAutosave = false;
 let branchMotionActive = false;
 let leafMotionActive = false;
 let motionFrame = 0;
@@ -3431,6 +3435,7 @@ function updateSceneFromTime(smoothZoom = false) {
 }
 
 function renderFrame() {
+    if (!appVisible) return;
     controls.update();
     camera.lookAt(cameraLookAt);
     if (bloomPass.enabled) composer.render();
@@ -3478,6 +3483,7 @@ function updateShaderUniforms() {
 
 /** Match the WebGL viewport to the canvas CSS size. */
 function resizeCanvas() {
+    if (!appVisible) return;
     const width = canvas.clientWidth || 800;
     const height = canvas.clientHeight || 480;
     renderer.setSize(width, height, false);
@@ -3489,6 +3495,45 @@ function resizeCanvas() {
     if (!$('zoom').checked) frameCameraToBounds(fullBounds, false);
     else updateSceneFromTime(false);
     renderFrame();
+}
+
+/** Suspend the hidden 3D pane and resume from the shared state when shown. */
+function setVisible(visible) {
+    const next = !!visible;
+    if (next === appVisible) {
+        if (next && pendingRegenerate) regenerate();
+        if (next && !animationHandle) startAnimation();
+        return;
+    }
+    appVisible = next;
+    if (!appVisible) {
+        if (animationHandle) cancelAnimationFrame(animationHandle);
+        animationHandle = 0;
+        if (autosaveTimer) {
+            clearTimeout(autosaveTimer);
+            autosaveTimer = 0;
+        }
+        return;
+    }
+    const keepCamera = !$('zoom')?.checked;
+    const savedCamera = keepCamera ? cameraSettings() : null;
+    const previousSuppress = suppressAutosave;
+    suppressAutosave = true;
+    try {
+        if (pendingRegenerate) regenerate();
+        resizeCanvas();
+        if (savedCamera) applyCameraState(savedCamera);
+    } finally {
+        suppressAutosave = previousSuppress;
+    }
+    if (!animationHandle) startAnimation();
+}
+
+function startAnimation() {
+    if (animationHandle || !appVisible) return;
+    lastAnimateTs = 0;
+    lastFrameTs = performance.now();
+    animationHandle = requestAnimationFrame(animate);
 }
 
 /* ==========================================================================
@@ -3547,6 +3592,11 @@ function notifySimulateEnd() {
 
 /** Re-run the 3D simulation (after a parameter or seed change) and update meshes. */
 function regenerate() {
+    if (!appVisible) {
+        pendingRegenerate = true;
+        return;
+    }
+    pendingRegenerate = false;
     let t0 = performance.now();
     notifySimulateStart();
     try {
@@ -3620,7 +3670,9 @@ function updatePerfHud() {
 
 /** Main animation loop (handles both playback and damped orbit camera controls). */
 function animate(ts) {
-    requestAnimationFrame(animate);
+    animationHandle = 0;
+    if (!appVisible) return;
+    animationHandle = requestAnimationFrame(animate);
     if (lastAnimateTs) {
         const frameMs = Math.min(150, ts - lastAnimateTs);
         frameTimeAvg = frameTimeAvg * 0.94 + frameMs * 0.06;
@@ -4489,6 +4541,7 @@ function captureAppState() {
 }
 
 function scheduleStateAutosave() {
+    if (!appVisible || suppressAutosave) return;
     if (applyingRemote) return;
     if (APP_BUS && window.__TREE_APP_BOOTING__) return;
     if (APP_BUS) APP_BUS.noteLocalChange(DIMENSION);
@@ -5167,6 +5220,21 @@ window.__tree3d = {
         applyCameraState(pose);
     },
     resize() { resizeCanvas(); },
+    get visible() { return appVisible; },
+    get animating() { return animationHandle !== 0; },
+    setVisible,
+    flushState() {
+        if (autosaveTimer) {
+            clearTimeout(autosaveTimer);
+            autosaveTimer = 0;
+        }
+        const state = captureAppState();
+        if (LINKED_MODE && !applyingRemote) {
+            saveTreeStateLocal(DIMENSION, state);
+            postLinkedMessage({ type: 'tree-state', state });
+        }
+        return state;
+    },
     selectNode,
     pruneSelected() {
         if (selectedNode < 0) return false;
@@ -5220,4 +5288,4 @@ if (!window.__TREE_APP_SKIP_RESTORE__) {
 }
 bindLinkedMode();
 
-requestAnimationFrame(animate);
+setVisible(true);

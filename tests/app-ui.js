@@ -243,15 +243,26 @@ async function main() {
                 visible: [...document.querySelectorAll('.app-pane')].filter((p) => getComputedStyle(p).display !== 'none').map((p) => p.dataset.view),
                 active: S.activePane,
                 pressed: document.querySelector('[data-layout="2d"]').getAttribute('aria-pressed'),
+                twoVisible: __tree2d.visible,
+                threeVisible: __tree3d.visible,
+                threeAnimating: __tree3d.animating,
             };
             S.setLayout('3d');
             await sleep(350);
             out.layout3d = {
                 visible: [...document.querySelectorAll('.app-pane')].filter((p) => getComputedStyle(p).display !== 'none').map((p) => p.dataset.view),
                 active: S.activePane,
+                twoVisible: __tree2d.visible,
+                threeVisible: __tree3d.visible,
+                threeAnimating: __tree3d.animating,
             };
             S.setLayout('split');
             await sleep(300);
+            out.layoutSplit = {
+                twoVisible: __tree2d.visible,
+                threeVisible: __tree3d.visible,
+                threeAnimating: __tree3d.animating,
+            };
             S.setActivePane('2d');
             document.querySelector('[data-pane-activate="3d"]').click();
             await sleep(250);
@@ -717,8 +728,15 @@ async function main() {
         assert.deepStrictEqual(result.layout2d.visible, ['2d'], '2D focus layout should show one pane');
         assert.strictEqual(result.layout2d.active, '2d', '2D focus layout should force the acting view');
         assert.strictEqual(result.layout2d.pressed, 'true', 'layout button should expose pressed state');
+        assert.strictEqual(result.layout2d.twoVisible, true, '2D focus should keep the 2D engine visible');
+        assert.strictEqual(result.layout2d.threeVisible, false, '2D focus should suspend the 3D engine');
+        assert.strictEqual(result.layout2d.threeAnimating, false, '2D focus should stop the 3D render loop');
         assert.deepStrictEqual(result.layout3d.visible, ['3d'], '3D focus layout should show one pane');
         assert.strictEqual(result.layout3d.active, '3d', '3D focus layout should force the acting view');
+        assert.strictEqual(result.layout3d.twoVisible, false, '3D focus should suspend the 2D engine');
+        assert.strictEqual(result.layout3d.threeVisible, true, '3D focus should keep the 3D engine visible');
+        assert.strictEqual(result.layout3d.threeAnimating, true, '3D focus should restart the 3D render loop');
+        assert.deepStrictEqual(result.layoutSplit, { twoVisible: true, threeVisible: true, threeAnimating: true }, 'Split should resume both engines');
         assert.strictEqual(result.activeClick.active, '3d', 'the pane link chip should set the acting view');
         assert.deepStrictEqual(result.activeClick.chips, ['none', 'flex'], 'Acting here should follow the acting pane');
         assert.ok(result.activeClick.live.includes('3D'), 'the live region should announce the acting view');
@@ -937,6 +955,9 @@ async function main() {
                 headerInert: document.querySelector('.app-header').inert,
                 visiblePanes: [...document.querySelectorAll('.app-pane')].filter((p) => getComputedStyle(p).display !== 'none').map((p) => p.dataset.view),
                 panelTransform: getComputedStyle(panel).transform,
+                twoVisible: __tree2d.visible,
+                threeVisible: __tree3d.visible,
+                threeAnimating: __tree3d.animating,
             };
             S.setSheetState('full');
             await sleep(300);
@@ -965,6 +986,9 @@ async function main() {
                 active: S.activePane,
                 visible: [...document.querySelectorAll('.app-pane')].filter((p) => getComputedStyle(p).display !== 'none').map((p) => p.dataset.view),
                 pressed: document.querySelector('[data-mobile-pane="3d"]').getAttribute('aria-pressed'),
+                twoVisible: __tree2d.visible,
+                threeVisible: __tree3d.visible,
+                threeAnimating: __tree3d.animating,
             };
             return out;
         })()`);
@@ -973,6 +997,9 @@ async function main() {
         assert.strictEqual(mobile.initial.modal, null, 'peek sheet should not be modal');
         assert.strictEqual(mobile.initial.headerInert, false, 'peek sheet should leave the canvas available');
         assert.deepStrictEqual(mobile.initial.visiblePanes, ['2d'], 'phone should show one pane');
+        assert.strictEqual(mobile.initial.twoVisible, true, 'phone should keep the visible 2D engine running');
+        assert.strictEqual(mobile.initial.threeVisible, false, 'phone should suspend the hidden 3D engine');
+        assert.strictEqual(mobile.initial.threeAnimating, false, 'phone should stop the hidden 3D render loop');
         assert.ok(mobile.initial.panelTransform.includes('matrix'), 'peek sheet should be translated out of view');
         assert.strictEqual(mobile.full.role, 'dialog', 'full sheet should be a dialog');
         assert.strictEqual(mobile.full.modal, 'true', 'full sheet should be modal');
@@ -987,6 +1014,9 @@ async function main() {
         assert.strictEqual(mobile.closed.open, false, 'a second Escape should close the sheet');
         assert.strictEqual(mobile.pane.active, '3d', 'the mobile pane toggle should set the acting view');
         assert.deepStrictEqual(mobile.pane.visible, ['3d'], 'the mobile pane toggle should change visibility');
+        assert.strictEqual(mobile.pane.twoVisible, false, 'the mobile pane toggle should suspend the hidden 2D engine');
+        assert.strictEqual(mobile.pane.threeVisible, true, 'the mobile pane toggle should resume the visible 3D engine');
+        assert.strictEqual(mobile.pane.threeAnimating, true, 'the mobile pane toggle should restart the 3D render loop');
         assert.strictEqual(mobile.pane.pressed, 'true', 'the mobile pane toggle should expose pressed state');
 
         // Tablet width still uses the modal drawer.
