@@ -22,13 +22,14 @@ function scriptSource(file) {
 }
 
 function load(dimension) {
-    const ctx = { console };
+    const ctx = { console, window: {} };
     vm.createContext(ctx);
     const files = [
         'shared/params.js',
         'shared/presets.js',
         'shared/grammar.js',
         'shared/environment.js',
+        'shared/automation.js',
         dimension === '2d' ? 'prototype/simulation.js' : '3d-prototype/simulation.js',
     ];
     for (const file of files) {

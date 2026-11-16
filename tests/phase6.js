@@ -21,13 +21,14 @@ function scriptSource(file) {
 }
 
 function load(dimension) {
-    const ctx = { console };
+    const ctx = { console, window: {} };
     vm.createContext(ctx);
     for (const file of [
         'shared/params.js',
         'shared/presets.js',
         'shared/grammar.js',
         'shared/environment.js',
+        'shared/automation.js',
         dimension === '2d' ? 'prototype/simulation.js' : '3d-prototype/simulation.js',
     ]) {
         vm.runInContext(scriptSource(file), ctx, { filename: file });

@@ -47,6 +47,7 @@
             return r;
         };
         if (opts.onToggleTrack) opts.onToggleTrack = wrap(opts.onToggleTrack);
+        if (opts.onSetSine) opts.onSetSine = wrap(opts.onSetSine);
         if (opts.onAddKey) opts.onAddKey = wrap(opts.onAddKey);
         if (opts.onUpdateKey) opts.onUpdateKey = wrap(opts.onUpdateKey);
         if (opts.onDeleteKey) opts.onDeleteKey = wrap(opts.onDeleteKey);
@@ -86,7 +87,8 @@
             const time = opts.getTime();
             const lifespan = opts.getLifespan();
             const value = opts.getValue ? opts.getValue() : (track ? opts.getValue() : null);
-            const keys = track ? track.keys.slice() : [];
+            const isSine = !!(track && (track.type === 'sine' || (track.amp != null && track.offset != null && !Array.isArray(track.keys))));
+            const keys = (track && Array.isArray(track.keys)) ? track.keys.slice() : [];
             pop.innerHTML = '';
             const h = document.createElement('h4');
             h.textContent = key;
@@ -97,13 +99,42 @@
             h.appendChild(close);
             pop.appendChild(h);
 
+            // Mode switch
+            const modeRow = document.createElement('div');
+            modeRow.className = 'row';
+            const kfBtn = document.createElement('button');
+            kfBtn.textContent = 'Keyframes';
+            const sineBtn = document.createElement('button');
+            sineBtn.textContent = 'Sine wave';
+            const activeMode = track ? (isSine ? 'sine' : 'keys') : null;
+            kfBtn.style.fontWeight = activeMode === 'keys' ? '700' : '400';
+            sineBtn.style.fontWeight = activeMode === 'sine' ? '700' : '400';
+            kfBtn.onclick = () => {
+                if (activeMode === 'keys') return;
+                if (opts.onToggleTrack) opts.onToggleTrack(true);
+                refresh();
+            };
+            sineBtn.onclick = () => {
+                if (activeMode === 'sine') return;
+                if (opts.onSetSine) opts.onSetSine();
+                refresh();
+            };
+            modeRow.appendChild(kfBtn);
+            modeRow.appendChild(sineBtn);
+            pop.appendChild(modeRow);
+
             // Track on/off
             const toggleRow = document.createElement('div');
             toggleRow.className = 'row';
             const toggleBtn = document.createElement('button');
             toggleBtn.textContent = track ? 'Disable track' : 'Enable track';
             toggleBtn.onclick = () => {
-                opts.onToggleTrack(!track);
+                if (track) {
+                    if (opts.onClear) opts.onClear();
+                } else {
+                    // default to keyframes when enabling generically
+                    if (opts.onToggleTrack) opts.onToggleTrack(true);
+                }
                 refresh();
             };
             toggleRow.appendChild(toggleBtn);
@@ -113,7 +144,7 @@
             toggleRow.appendChild(now);
             pop.appendChild(toggleRow);
 
-            if (track) {
+            if (track && !isSine) {
                 // Keys
                 const keysDiv = document.createElement('div');
                 keysDiv.className = 'keys';
@@ -157,7 +188,7 @@
                 addBtn.textContent = 'Add key at playhead (' + Number(time).toFixed(1) + ' yr)';
                 addBtn.onclick = () => {
                     const v = opts.getValue ? opts.getValue() : (track ? evaluateTrackSafe(track, time) : null);
-                    opts.onAddKey(time, Number.isFinite(v) ? v : (track.keys[track.keys.length - 1][1]));
+                    opts.onAddKey(time, Number.isFinite(v) ? v : (keys.length ? keys[keys.length - 1][1] : 0));
                     refresh();
                 };
                 addRow.appendChild(addBtn);
@@ -201,6 +232,55 @@
                 pop.appendChild(clearRow);
             }
 
+            if (track && isSine) {
+                const sineRow = document.createElement('div');
+                sineRow.className = 'row';
+                const ampLabel = document.createElement('span');
+                ampLabel.textContent = 'Amp';
+                const ampInput = document.createElement('input');
+                ampInput.type = 'number';
+                ampInput.step = '0.01';
+                ampInput.value = track.amp;
+                const offLabel = document.createElement('span');
+                offLabel.textContent = 'Offset';
+                const offInput = document.createElement('input');
+                offInput.type = 'number';
+                offInput.step = '0.01';
+                offInput.value = track.offset;
+                const perLabel = document.createElement('span');
+                perLabel.textContent = 'Period';
+                const perInput = document.createElement('input');
+                perInput.type = 'number';
+                perInput.step = '1';
+                perInput.value = Number.isFinite(track.period) && track.period > 0 ? track.period : '';
+                perInput.placeholder = 'yrs';
+                function commitSine() {
+                    const a = Number(ampInput.value);
+                    const o = Number(offInput.value);
+                    const p = Number(perInput.value);
+                    if (opts.onSetSine) opts.onSetSine(a, o, Number.isFinite(p) && p > 0 ? p : null);
+                    refresh();
+                }
+                ampInput.onchange = commitSine;
+                offInput.onchange = commitSine;
+                perInput.onchange = commitSine;
+                sineRow.appendChild(ampLabel);
+                sineRow.appendChild(ampInput);
+                sineRow.appendChild(offLabel);
+                sineRow.appendChild(offInput);
+                sineRow.appendChild(perLabel);
+                sineRow.appendChild(perInput);
+                pop.appendChild(sineRow);
+
+                const clearRow = document.createElement('div');
+                clearRow.className = 'actions';
+                const clearBtn = document.createElement('button');
+                clearBtn.textContent = 'Clear track';
+                clearBtn.onclick = () => { opts.onClear(); refresh(); };
+                clearRow.appendChild(clearBtn);
+                pop.appendChild(clearRow);
+            }
+
             const note = document.createElement('div');
             note.style.color = 'var(--mut,#666)';
             note.style.fontSize = '10px';
@@ -210,8 +290,12 @@
         }
 
         function evaluateTrackSafe(track, t) {
-            if (typeof evaluateTrack === 'function') return evaluateTrack(track, t, track.keys[0][1]);
-            return track.keys[track.keys.length - 1][1];
+            if (typeof evaluateTrack === 'function') {
+                const fallback = (track && Array.isArray(track.keys) && track.keys.length) ? track.keys[0][1] : (Number.isFinite(track?.offset) ? track.offset : 0);
+                return evaluateTrack(track, t, fallback, opts.getLifespan ? opts.getLifespan() : undefined);
+            }
+            if (track && Array.isArray(track.keys) && track.keys.length) return track.keys[track.keys.length - 1][1];
+            return Number.isFinite(track?.offset) ? track.offset : 0;
         }
 
         wrapOpts(opts, refresh);

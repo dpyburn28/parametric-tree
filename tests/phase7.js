@@ -18,13 +18,14 @@ const ROOT = path.join(__dirname, '..');
 function scriptSource(file) {
     return fs.readFileSync(path.join(ROOT, file), 'utf8').replace(/^export\s+/gm, '');
 }
-const ctx = { console };
+const ctx = { console, window: {} };
 vm.createContext(ctx);
 for (const file of [
     'shared/params.js',
     'shared/presets.js',
     'shared/grammar.js',
     'shared/environment.js',
+    'shared/automation.js',
     'prototype/simulation.js',
 ]) {
     vm.runInContext(scriptSource(file), ctx, { filename: file });

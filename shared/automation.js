@@ -10,6 +10,9 @@
 const AUTOMATION_VERSION = 1;
 const AUTOMATION_INTERP = ['linear', 'smooth', 'step'];
 const AUTOMATION_LOOP = ['none', 'loop', 'pingpong'];
+const AUTOMATION_SINE_CYCLES = 2;
+const AUTOMATION_SINE_TYPE = 'sine';
+const AUTOMATION_KEYFRAME_TYPE = 'keys';
 
 const AUTOMATION_META = {
     // Growth parameters (baked into the skeleton during simulation).
@@ -53,6 +56,33 @@ function normalizeTrack(key, track) {
     if (!track || typeof track !== 'object') return null;
     const meta = AUTOMATION_META[key];
     if (!meta) return null;
+    const wrap = meta.wrap || 0;
+    const isSine = track.type === AUTOMATION_SINE_TYPE
+        || (track.amp != null && track.offset != null && !Array.isArray(track.keys));
+    if (isSine) {
+        const range = (Number.isFinite(meta.max) && Number.isFinite(meta.min)) ? (meta.max - meta.min) : 1;
+        let amp = Number(track.amp);
+        if (!Number.isFinite(amp)) amp = range * 0.1;
+        let offset = Number(track.offset);
+        if (!Number.isFinite(offset)) offset = (Number.isFinite(meta.min) && Number.isFinite(meta.max)) ? (meta.min + meta.max) / 2 : 0;
+        amp = Math.max(0, amp);
+        if (range > 0) amp = Math.min(amp, range / 2);
+        offset = clamp(offset, meta.min, meta.max);
+        const cycles = Number.isFinite(track.cycles) ? track.cycles : AUTOMATION_SINE_CYCLES;
+        const period = Number.isFinite(track.period) ? track.period : null;
+        const phase = Number.isFinite(track.phase) ? track.phase : 0;
+        return {
+            type: AUTOMATION_SINE_TYPE,
+            amp,
+            offset,
+            cycles,
+            period,
+            phase,
+            wrap,
+            min: meta.min,
+            max: meta.max,
+        };
+    }
     const rawKeys = Array.isArray(track.keys) ? track.keys : [];
     const keys = [];
     for (const entry of rawKeys) {
@@ -67,8 +97,8 @@ function normalizeTrack(key, track) {
     keys.sort((a, b) => a[0] - b[0]);
     const interp = AUTOMATION_INTERP.indexOf(track.interp) >= 0 ? track.interp : 'smooth';
     const loop = AUTOMATION_LOOP.indexOf(track.loop) >= 0 ? track.loop : 'none';
-    const wrap = meta.wrap || 0;
     return {
+        type: AUTOMATION_KEYFRAME_TYPE,
         keys,
         interp,
         loop,
@@ -119,8 +149,27 @@ function trackTime(track, t) {
     return first + (cycle <= span ? cycle : span * 2 - cycle);
 }
 
-function evaluateTrack(track, t, fallback) {
-    if (!track || !Array.isArray(track.keys) || !track.keys.length) return fallback;
+function evaluateTrack(track, t, fallback, lifespan) {
+    if (!track || typeof track !== 'object') return fallback;
+    const isSine = track.type === AUTOMATION_SINE_TYPE || (track.amp != null && track.offset != null && !Array.isArray(track.keys));
+    if (isSine) {
+        const ls = Number.isFinite(lifespan) ? lifespan : (typeof P !== 'undefined' && Number.isFinite(P.lifespan) ? P.lifespan : 300);
+        const amp = Number.isFinite(track.amp) ? track.amp : 0;
+        const offset = Number.isFinite(track.offset) ? track.offset : (Number.isFinite(fallback) ? fallback : 0);
+        const phase = Number.isFinite(track.phase) ? track.phase : 0;
+        let period = Number.isFinite(track.period) ? track.period : 0;
+        if (period <= 0) {
+            const cycles = Number.isFinite(track.cycles) ? track.cycles : AUTOMATION_SINE_CYCLES;
+            if (ls > 0) period = ls / cycles;
+        }
+        if (!period || period <= 0) return clamp(offset, track.min, track.max);
+        const value = offset + amp * Math.sin((2 * Math.PI * t) / period + phase);
+        if (Number.isFinite(track.min) && Number.isFinite(track.max)) {
+            return clamp(value, track.min, track.max);
+        }
+        return value;
+    }
+    if (!Array.isArray(track.keys) || !track.keys.length) return fallback;
     const tt = trackTime(track, t);
     const keys = track.keys;
     if (tt <= keys[0][0]) return keys[0][1];
@@ -158,19 +207,19 @@ function resolveRenderParams(P, automation, t) {
         const meta = AUTOMATION_META[key];
         if (!meta || (meta.scope !== 'render' && meta.scope !== 'both')) continue;
         if (!out) out = Object.create(P);
-        out[key] = evaluateTrack(track, t, P[key]);
+        out[key] = evaluateTrack(track, t, P[key], P.lifespan);
     }
     return out || P;
 }
 
-function growthOverlay(automation, t) {
+function growthOverlay(automation, t, lifespan) {
     if (!automation || automation.enabled === false || !automation.tracks) return null;
     let result = null;
     for (const [key, track] of Object.entries(automation.tracks)) {
         const meta = AUTOMATION_META[key];
         if (!meta || (meta.scope !== 'growth' && meta.scope !== 'both')) continue;
         if (!result) result = {};
-        result[key] = evaluateTrack(track, t, null);
+        result[key] = evaluateTrack(track, t, null, lifespan);
     }
     return result;
 }
@@ -222,3 +271,6 @@ window.AUTOMATION_META = AUTOMATION_META;
 window.AUTOMATION_INTERP = AUTOMATION_INTERP;
 window.AUTOMATION_LOOP = AUTOMATION_LOOP;
 window.AUTOMATION_VERSION = AUTOMATION_VERSION;
+window.AUTOMATION_SINE_CYCLES = AUTOMATION_SINE_CYCLES;
+window.AUTOMATION_SINE_TYPE = AUTOMATION_SINE_TYPE;
+window.AUTOMATION_KEYFRAME_TYPE = AUTOMATION_KEYFRAME_TYPE;

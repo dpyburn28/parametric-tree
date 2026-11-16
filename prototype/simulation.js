@@ -422,7 +422,7 @@ export function simulate() {
         // Buds created this year are appended and must not grow until next year,
         // so only iterate over the buds that existed when the year began.
         const year = displayYearForStep(step, P.lifespan);
-        const epoch = growthOverlay(_automationState, year);
+        const epoch = growthOverlay(_automationState, year, P.lifespan);
         const ep = epoch ? mergeParams(P, epoch) : P;
         lightField.params = ep;
         const activeCount = buds.length;

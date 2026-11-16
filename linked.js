@@ -1715,7 +1715,6 @@ function applyStudioAutomation(auto) {
     if (canonical) canonical.automation = normalized;
     window.__tree2d?.applyAutomation?.(normalized);
     window.__tree3d?.applyAutomation?.(normalized);
-    scheduleStateAutosave();
     syncPanel();
 }
 
@@ -1729,8 +1728,9 @@ function openStudioAutomationEditor(btn, key) {
         getValue: () => {
             const track = canonical?.automation?.tracks?.[key];
             const base = canonical?.params?.[key];
+            const lifespan = Number(canonical?.params?.lifespan) || 300;
             return (track && canonical?.automation?.enabled !== false)
-                ? evaluateTrack(track, transportTime, base)
+                ? evaluateTrack(track, transportTime, base, lifespan)
                 : base;
         },
         onToggleTrack: (on) => {
@@ -1740,6 +1740,20 @@ function openStudioAutomationEditor(btn, key) {
                 auto.tracks[key] = normalizeTrack(key, { keys: [[transportTime, base]], interp: 'smooth', loop: 'none' });
             } else {
                 delete auto.tracks[key];
+            }
+            applyStudioAutomation(auto);
+        },
+        onSetSine: (amp, offset, period) => {
+            const auto = normalizeAutomation(canonical?.automation);
+            const meta = AUTOMATION_META[key];
+            const range = (Number.isFinite(meta.max) && Number.isFinite(meta.min)) ? (meta.max - meta.min) : 1;
+            const base = canonical?.params?.[key];
+            const a = Number.isFinite(amp) ? amp : range * 0.1;
+            const o = Number.isFinite(offset) ? offset : base;
+            const p = Number.isFinite(period) && period > 0 ? period : null;
+            auto.tracks[key] = normalizeTrack(key, { type: 'sine', amp: a, offset: o, period: p });
+            if (auto.tracks[key] && canonical?.params) {
+                canonical.params[key] = auto.tracks[key].offset;
             }
             applyStudioAutomation(auto);
         },

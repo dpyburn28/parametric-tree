@@ -2452,6 +2452,8 @@ function automationKeyForControl(id, node) {
 
 function upsertAutomationKey(key, year, value) {
     if (!AUTOMATION_META[key]) return;
+    const tr = automation.tracks[key];
+    if (tr && tr.type === 'sine') return;
     if (!automation.tracks[key]) {
         automation.tracks[key] = normalizeTrack(key, { keys: [[year, value]], interp: 'smooth', loop: 'none' });
     } else {
@@ -2466,6 +2468,15 @@ function upsertAutomationKey(key, year, value) {
 function applyAutomationChange({ regenerate = null } = {}) {
     setSimulationAutomation(automation);
     scheduleStateAutosave();
+    // Keep the base slider in sync with a sine track's center value.
+    for (const [k, track] of Object.entries(automation.tracks || {})) {
+        if (track && track.type === 'sine' && Number.isFinite(track.offset) && (k in P)) {
+            P[k] = track.offset;
+        }
+    }
+    syncParamInputs();
+    try { updateEnvUI(); } catch (e) {}
+    try { window.__paramInputsWind = !!paramInputs.wind; } catch (e) {}
     const needsRegen = regenerate !== null ? regenerate : hasGrowthTracks(automation);
     if (needsRegen) scheduleRegenerate(); else draw();
 }
@@ -2478,13 +2489,26 @@ function automationOptions(key, input) {
         getLifespan: () => P.lifespan,
         getValue: () => {
             const track = automation.tracks[key];
-            return (track && automation.enabled) ? evaluateTrack(track, time, P[key]) : P[key];
+            return (track && automation.enabled) ? evaluateTrack(track, time, P[key], P.lifespan) : P[key];
         },
         onToggleTrack: (on) => {
             if (on) {
                 automation.tracks[key] = normalizeTrack(key, { keys: [[time, P[key]]], interp: 'smooth', loop: 'none' });
             } else {
                 delete automation.tracks[key];
+            }
+            applyAutomationChange();
+        },
+        onSetSine: (amp, offset, period) => {
+            const meta = AUTOMATION_META[key];
+            const range = (Number.isFinite(meta.max) && Number.isFinite(meta.min)) ? (meta.max - meta.min) : 1;
+            const a = Number.isFinite(amp) ? amp : range * 0.1;
+            const o = Number.isFinite(offset) ? offset : P[key];
+            const p = Number.isFinite(period) && period > 0 ? period : null;
+            automation.tracks[key] = normalizeTrack(key, { type: 'sine', amp: a, offset: o, period: p });
+            if (automation.tracks[key]) {
+                P[key] = automation.tracks[key].offset;
+                syncParamInputs();
             }
             applyAutomationChange();
         },
@@ -2549,8 +2573,18 @@ function buildParamControls() {
             P[key] = +e.target.value;
             valueSpan.textContent = P[key];
             if (automation.enabled && automation.tracks[key]) {
-                upsertAutomationKey(key, time, P[key]);
-                scheduleStateAutosave();
+                const tr = automation.tracks[key];
+                if (tr && tr.type === 'sine') {
+                    tr.offset = P[key];
+                    if (tr.offset != null) {
+                        // keep normalized/clamped via re-normalize
+                    }
+                    automation.tracks[key] = normalizeTrack(key, tr);
+                    applyAutomationChange();
+                } else {
+                    upsertAutomationKey(key, time, P[key]);
+                    scheduleStateAutosave();
+                }
             }
             if (key !== 'speed' && key !== 'leaves') {
                 clearPrunes();

@@ -37,7 +37,7 @@ const state = vm.runInContext('captureTreeState', ctx)({
     camera: null,
 });
 
-assert.strictEqual(state.version, 2);
+assert.strictEqual(state.version, 3);
 assert.strictEqual(state.dimension, '2d');
 assert.strictEqual(state.seed, 1234);
 assert.strictEqual(state.time, 80);
@@ -51,14 +51,14 @@ delete v1.ui;
 delete v1.exportSettings;
 delete v1.compare;
 const migrated = vm.runInContext('migrateTreeState', ctx)(v1);
-assert.strictEqual(migrated.version, 2);
+assert.strictEqual(migrated.version, 3);
 assert.deepStrictEqual(JSON.parse(JSON.stringify(migrated.ui)), { theme: 'auto' });
 assert.strictEqual(migrated.exportSettings, null);
 assert.strictEqual(migrated.compare, null);
 assert.deepStrictEqual(migrated.cuts, state.cuts);
 
 const migratedFromJson = vm.runInContext('stateFromJson', ctx)(JSON.stringify(v1));
-assert.strictEqual(migratedFromJson.version, 2);
+assert.strictEqual(migratedFromJson.version, 3);
 
 const encoded = vm.runInContext('encodeTreeState', ctx)(state);
 const decoded = vm.runInContext('decodeTreeState', ctx)(encoded);
