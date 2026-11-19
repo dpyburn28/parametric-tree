@@ -2,6 +2,8 @@
 
 # Parametric Tree — Refinement & Fidelity Roadmap
 
+> **Current product scope:** Grow-only procedural tree generation, the shared timeline, 2D/3D views, save/load/share, and direct SVG/PNG/GLB export. Sculpting, analytics, recording, and batch export have been removed. See [the Grow-only focus plan](docs/grow-only-focus-plan.md). The implementation notes below are historical where they describe those features.
+
 The Phase 1–4 roadmap is archived at [`docs/roadmap.md`](docs/roadmap.md). That document was about adding breadth: species, environment, rendering, pruning, export, analytics. This document is about depth.
 
 The prototype already does a lot. The next pass should make what it does feel **deliberate, botanical, and production-ready**: stronger silhouettes, clearer species identity, better light and motion, a more tactile 3D surface, and tooling that supports iteration instead of one-off demos.
@@ -21,7 +23,7 @@ New simulation data must be deterministic, precomputed, and cheap enough to rege
 - Species presets, sympodial forking, root flare, seasons, and 300-year lifespans.
 - Directional sun, prevailing wind, obstacle/topiary volumes, and 1–3 tree competition.
 - Procedural bark, backlit leaves, GPU sway, falling debris, and ground litter in 3D.
-- Click-to-prune with stable `budId:birthStep` cuts, GLB/SVG export, and growth analytics.
+- Direct SVG/PNG/GLB export and reproducible tree state.
 - A clean 2D renderer and a richer 3D renderer sharing the same growth-model architecture and parameter vocabulary.
 
 ### Architectural invariants
@@ -29,7 +31,7 @@ New simulation data must be deterministic, precomputed, and cheap enough to rege
 - `nodes[]` is flat; parents always have a lower index.
 - `simulate()` runs once per seed/parameter change, not per frame.
 - `growthTime(displayYear)` maps display years to structural steps.
-- Per-bud hashing (`hashRandom(budId, step, channel)`) keeps unrelated branches stable when one bud is pruned.
+- Per-bud hashing (`hashRandom(budId, step, channel)`) keeps repeated growth deterministic.
 - 2D up is negative `y`; 3D up is positive `y`.
 
 ### Known fidelity ceilings

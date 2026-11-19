@@ -1,10 +1,9 @@
 /**
  * Studio control manifest.
  *
- * Every control that exists in the cloned universal panel gets exactly one
- * entry here. The studio builds its flyout from this manifest and re-parents
- * the cloned DOM nodes into the matching slots. `tests/app-ui.js` verifies
- * that no control is duplicated or orphaned.
+ * Every retained Grow, timeline, view, and Project control gets one entry here.
+ * The studio builds its panel from this manifest and re-parents the cloned
+ * DOM nodes into the matching slots. `tests/app-ui.js` verifies retained mounts.
  *
  * `kind` is one of:
  *   id      — an element with that id in the cloned 2D panel or injected 3D set
@@ -16,9 +15,6 @@
 
 export const STUDIO_MODES = [
     { id: 'grow', label: 'Grow', question: 'What tree am I making?', icon: 'grow' },
-    { id: 'sculpt', label: 'Sculpt', question: 'How do I shape it?', icon: 'sculpt' },
-    { id: 'study', label: 'Study', question: 'What is happening over time?', icon: 'study' },
-    { id: 'deliver', label: 'Deliver', question: 'How do I take it with me?', icon: 'deliver' },
 ];
 
 const P = (key, label, group, level, scope, help, order) => ({
@@ -203,114 +199,23 @@ export const MANIFEST = [
     }),
     C('seedv', 'Seed', 'grow', ['Essentials'], 'essential', 'both', 211, { kind: 'display' }),
 
-    /* ---- Sculpt -------------------------------------------------------- */
-    C('prune', 'Prune', 'sculpt', ['Tools'], 'essential', 'active', 600, {
-        help: 'Prune mode. Click a branch in the acting view to cut it; hover previews the subtree.',
+    /* ---- Direct exports ----------------------------------------------- */
+    C('exportSvg', 'Export SVG', 'project', ['Project'], 'essential', '2d', 910, {
+        mount: 'project-menu',
+        help: 'Export the current 2D tree as a vector SVG.',
     }),
-    C('lasso', 'Lasso', 'sculpt', ['Tools'], 'essential', 'active', 601, {
-        help: 'Drag a polygon to cut several branch roots at once.',
+    C('exportPng', 'Export PNG', 'project', ['Project'], 'essential', 'active', 911, {
+        mount: 'project-menu',
+        help: 'Export the active tree view as a PNG image.',
     }),
-    C('pruneType', 'Cut type', 'sculpt', ['Tools'], 'essential', 'both', 602, {
-        help: 'Thinning removes a subtree cleanly; heading cuts back to a bud; pollard creates dense regrowth.',
+    C('exportGlb', 'Export GLB', 'project', ['Project'], 'essential', '3d', 912, {
+        mount: 'project-menu',
+        help: 'Export the current 3D tree as a GLB model.',
     }),
-    C('undoCut', 'Undo cut', 'sculpt', ['History'], 'essential', 'active', 610, {
-        help: 'Undo the last cut in the acting view.',
-    }),
-    C('redoCut', 'Redo cut', 'sculpt', ['History'], 'essential', 'active', 611, {
-        help: 'Redo the last undone cut in the acting view.',
-    }),
-    C('clearCuts', 'Clear cuts', 'sculpt', ['History'], 'essential', 'both', 612, {
-        help: 'Remove every cut in both views. This is undoable.',
-    }),
-    C('isolate', 'Isolate selected', 'sculpt', ['Selection'], 'essential', 'active', 620, {
-        help: 'Dim everything outside the selected branch. Select a branch first.',
-    }),
-    C('snapshot', 'Capture before', 'sculpt', ['Before / after'], 'essential', 'active', 630, {
-        help: 'Capture the current structure as a ghost overlay.',
-    }),
-    C('compare', 'Show ghost', 'sculpt', ['Before / after'], 'essential', 'active', 631, {
-        help: 'Overlays the structure you captured so you can see what your cuts changed.',
-    }),
-
-    /* ---- Study --------------------------------------------------------- */
-    C('analyticsPin', 'Pin run A', 'study', ['Run A vs B'], 'essential', 'both', 700, {
-        help: 'Freeze the current analytics run as run A, then change anything and compare.',
-    }),
-    C('analyticsCompare', 'Compare to run A', 'study', ['Run A vs B'], 'essential', 'both', 701, {
-        help: 'Draw run A as dashed lines over the current run.',
-    }),
-    C('analyticsClear', 'Clear run A', 'study', ['Run A vs B'], 'essential', 'both', 702, {
-        help: 'Remove the pinned run A from both views.',
-    }),
-    C('analyticsBaselineLabel', 'Run A', 'study', ['Run A vs B'], 'essential', 'both', 703, { kind: 'display' }),
-    C('analyticsSummary', 'Delta summary', 'study', ['Run A vs B'], 'essential', 'both', 704, { kind: 'display' }),
-    C('inspector', 'Selection', 'study', ['Selection'], 'essential', 'active', 720, {
-        help: 'Click a branch in the acting view to inspect its node metadata.',
-    }),
-    C('vizColor', 'Bark color mode', 'study', ['Overlays'], 'advanced', 'both', 800, {
-        help: 'Tint bark by natural material, branch order, light, vigor or pipe model.',
-    }),
-    C('vizSkeleton', 'Skeleton and nodes', 'study', ['Overlays'], 'advanced', 'both', 801, {
-        help: 'Show the simulated skeleton and its nodes.',
-    }),
-    C('vizLight', 'Light grid', 'study', ['Overlays'], 'advanced', 'both', 802, {
-        help: 'Show light grid cells (2D) or light voxels (3D).',
-    }),
-    C('vizVectors', 'Tropism vectors', 'study', ['Overlays'], 'advanced', 'both', 803, {
-        help: 'Show phototropism, droop and wind steering vectors.',
-    }),
-    C('vizShed', 'Shed branches', 'study', ['Overlays'], 'advanced', 'both', 804, {
-        help: 'Ghost branches that were shed by the light model.',
-    }),
-    C('vizXray', 'X-ray', 'study', ['Overlays'], 'advanced', 'both', 805, {
-        help: 'Dim bark and leaves so the structure reads through.',
-    }),
-    C('vizWire', '3D branch wireframe', 'study', ['Overlays'], 'advanced', '3d', 806, {
-        help: 'Draw a wireframe overlay on 3D branches.',
-    }),
-    C('vizPerf', 'Performance HUD', 'study', ['Overlays'], 'advanced', '3d', 807, {
-        help: 'Show frame, simulation and render timings in the 3D scene.',
-    }),
-
-    /* ---- Deliver › Export --------------------------------------------- */
-    C('exportSvg', 'Export SVG', 'deliver', ['Export'], 'essential', '2d', 900, {
-        help: 'Export the 2D silhouette as a vector SVG.',
-    }),
-    C('exportPng', 'Export PNG', 'deliver', ['Export'], 'essential', 'active', 901, {
-        help: 'Export a PNG of the acting view.',
-    }),
-    C('exportGlb', 'Export GLB', 'deliver', ['Export'], 'essential', '3d', 902, {
-        help: 'Export the visible 3D branches, leaves and roots as a GLB model.',
-    }),
-    C('exportCsv', 'Analytics CSV', 'deliver', ['Export'], 'essential', 'active', 903, {
-        help: 'Export per-step analytics as CSV, with run A columns when pinned.',
-    }),
-    C('exportJson', 'Analytics JSON', 'deliver', ['Export'], 'essential', 'active', 904, {
-        help: 'Export per-step analytics as JSON, with run A comparison when pinned.',
-    }),
-    C('exportBatch', 'Export batch ZIP', 'deliver', ['Export'], 'essential', 'active', 905, {
-        help: 'Write a package of frames or GLB, analytics, state and a manifest.',
-    }),
-    C('shareState', 'Copy link', 'deliver', ['Export'], 'essential', 'both', 906, {
+    C('shareState', 'Copy link', 'project', ['Project'], 'essential', 'both', 913, {
+        mount: 'project-menu',
         help: 'Copy a share link that restores this tree.',
     }),
-    C('svgRoots', 'SVG roots', 'deliver', ['Export', 'SVG options'], 'advanced', '2d', 920),
-    C('svgBranches', 'SVG branches', 'deliver', ['Export', 'SVG options'], 'advanced', '2d', 921),
-    C('svgLeaves', 'SVG leaves/flowers', 'deliver', ['Export', 'SVG options'], 'advanced', '2d', 922),
-    C('svgBackground', 'SVG background', 'deliver', ['Export', 'SVG options'], 'advanced', '2d', 923),
-    C('svgLineArt', 'SVG line art', 'deliver', ['Export', 'SVG options'], 'advanced', '2d', 924),
-    C('svgWidth', 'SVG width', 'deliver', ['Export', 'SVG options'], 'advanced', '2d', 925),
-    C('svgHeight', 'SVG height', 'deliver', ['Export', 'SVG options'], 'advanced', '2d', 926),
-    C('svgDpi', 'SVG DPI', 'deliver', ['Export', 'SVG options'], 'advanced', '2d', 927),
-    C('svgAnnotations', 'SVG annotations', 'deliver', ['Export', 'SVG options'], 'advanced', '2d', 928),
-    C('svgScaleBar', 'SVG scale bar', 'deliver', ['Export', 'SVG options'], 'advanced', '2d', 929),
-    C('pngScale', 'PNG scale', 'deliver', ['Export', 'PNG options'], 'advanced', 'both', 940),
-    C('glbRoots', 'GLB roots', 'deliver', ['Export', 'GLB options'], 'advanced', '3d', 950),
-    C('glbLeaves', 'GLB leaves/flowers', 'deliver', ['Export', 'GLB options'], 'advanced', '3d', 951),
-    C('glbMetadata', 'GLB metadata', 'deliver', ['Export', 'GLB options'], 'advanced', '3d', 952),
-    C('glbAxis', 'Axis', 'deliver', ['Export', 'GLB options'], 'advanced', '3d', 953),
-    C('glbUnits', 'Units', 'deliver', ['Export', 'GLB options'], 'advanced', '3d', 954),
-    C('glbLod', 'GLB detail', 'deliver', ['Export', 'GLB options'], 'advanced', '3d', 955),
 
     /* ---- Project menu -------------------------------------------------- */
     C('saveState', 'Save state', 'project', ['Project'], 'essential', 'active', 1000, {

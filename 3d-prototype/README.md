@@ -2,6 +2,8 @@
 
 A procedural 3D tree generator that grows a tree from a seed to a mature adult, with time as a scrubbable dimension. Ported from the 2D prototype in `../prototype/` to 3D using Three.js.
 
+> **Current scope:** The standalone page is a grow/view tool with save/load/share and direct PNG/GLB export. Pruning, node inspection, analytics, comparison, and batch export have been removed. Older implementation notes below are historical where they describe those features.
+
 **Roadmap:** [refinement/fidelity plan](../parametric-tree.md) · [release checklist](../docs/release-checklist.md) · [Phase 1–4 archive](../docs/roadmap.md).
 
 ## Files
@@ -9,9 +11,9 @@ A procedural 3D tree generator that grows a tree from a seed to a mature adult, 
 | File | Purpose |
 |---|---|
 | `3d-prototype.html` | Page structure + Three.js import map |
-| `styles.css` | Layout, viewport styling, sun-driven day/night theme, and node inspector |
-| `simulation.js` | 3D skeleton simulation: growth, golden-angle phyllotaxis, species grammar, roots, 3D voxel light model, shedding, pruning |
-| `main.js` | ES module: Three.js renderer, pipe-model thickness, dynamic tapered branch mesh, instanced leaves/flowers, root meshes, orbit camera, inspector, and UI (imports `simulation.js`) |
+| `styles.css` | Layout, viewport styling, and sun-driven day/night theme |
+| `simulation.js` | 3D skeleton simulation: growth, golden-angle phyllotaxis, species grammar, roots, voxel light model, and natural shedding |
+| `main.js` | ES module: Three.js renderer, pipe-model thickness, tapered branch mesh, instanced leaves/flowers, roots, orbit camera, and grow/view/export UI |
 | `../shared/params.js` | Shared defaults, `PARAM_META`, and dimension overrides |
 | `../shared/presets.js` | Shared species grammar presets (`SPECIES_PRESETS_V2`) |
 | `../shared/grammar.js` | Shared order-angle and phenology helpers |
@@ -19,13 +21,13 @@ A procedural 3D tree generator that grows a tree from a seed to a mature adult, 
 | `../shared/state.js` | Versioned save/load, v1→v2 migration, share-link, and localStorage state helpers |
 | `../shared/zip.js` | Dependency-free store-only ZIP writer used by batch export |
 | `../index.html` | Single-page split studio: both engines mounted in shadow-root panes with one shared state |
-| `../tests/phase5.js` | Node-based parity, determinism, metadata, root, phenology, and prune checks |
+| `../tests/phase5.js` | Node-based parity, determinism, metadata, root, and phenology checks |
 | `../tests/phase6.js` | Solar parity, light/wind determinism, forest budgets, 7-tree/300-year profile, and environment checks |
 | `../tests/phase7.js` | Species bark/leaf render-trait and merged-forest checks |
 | `../tests/phase8.js` | State encode/decode, migration, and share-link round-trip checks |
 | `../tests/phase9.js` | ZIP/CRC structure checks for batch export |
 | `../tests/visual-regression.js` | Headless Chrome visual baselines for fixed seeds, presets, ages, and the combined split studio |
-| `../tests/app-ui.js` | Headless Chrome smoke test for the split studio, universal panel, active pane, fullscreen, ground detail/density, analytics comparison, batch export, accessibility, mobile drawer, and shared state |
+| `../tests/app-ui.js` | Headless Chrome smoke test for the Grow-only studio, retained Project utilities, layouts, and standalone feature surfaces |
 | `../tests/baselines/` | Compact luminance-grid baselines used by the visual harness |
 
 ### Running
@@ -65,11 +67,10 @@ World units: the seed is at `(0, 0, 0)`, `+x` is right, `+z` is forward, and **u
 | `axisId`, `axisOrder`, `parentAxisId` | Stable axis identity and supporting axis |
 | `segmentIndex`, `pathLength` | Position along the axis and distance from the root |
 | `dirX, dirY, dirZ`, `upX, upY, upZ` | Unit direction and a stable perpendicular frame |
-| `budType` | `leader`, `scaffold`, `lateral`, `cut regrowth`, or `reiteration` |
-| `fate` | `live`, `shed`, `pruned`, or `broken` |
+| `budType` | `leader`, `scaffold`, `lateral`, or `reiteration` |
+| `fate` | `live`, `shed`, or `broken` |
 | `birthLight`, `birthShade` | Light at node creation |
 | `tortuosity`, `mechanicalLoad` | Deterministic per-node bend and lightweight subtree/wind load |
-| `cut` | `null` or `{ type, step, radius }` on a cut node |
 
 **Bud** is a growing 3D shoot tip used only during simulation. It carries a unit direction `(dirX, dirY, dirZ)`, an accumulated `phyllotaxis` roll angle around its axis, `order`, `vigor`, `age`, and `life`.
 

@@ -129,12 +129,10 @@ export function getSimulationAutomation() { return _automationState; }
  * @property {number} segmentIndex Position along the axis.
  * @property {number} pathLength Distance from the root along the skeleton.
  * @property {number} dirX, dirY Unit direction of the segment.
- * @property {number} budType    0 leader, 1 scaffold, 2 lateral, 3 cut regrowth, 4 reiteration.
- * @property {number} fate       0 live, 1 shed, 2 pruned, 3 broken.
+ * @property {number} budType    0 leader, 1 scaffold, 2 lateral, 4 reiteration.
+ * @property {number} fate       0 live, 1 shed, 3 broken.
  * @property {number} birthLight Light level when the node was created.
  * @property {number} birthShade 1 - birthLight.
- * @property {number} cutType    0 none, 1 thinning, 2 heading, 3 pollard.
- * @property {number} cutStep    Growth step of the cut (-1 if none).
  *
  * @typedef {Object} Bud  A growing shoot tip (simulation only).
  * @property {number} id        Stable id used to seed this bud's random choices.
@@ -168,8 +166,6 @@ export let treeRoots = [];
 export let treeTraits = [];
 /** Per-tree species name for rendering/debugging. */
 export let treeSpecies = [];
-/** Cuts that remove a bud's growth at a particular step: `${budId}:${step}`. */
-export const prunedCuts = new Map();
 /** Deterministic axis id counter, reset at the start of each simulation. */
 export let nextAxisId = 1;
 /** Old-growth reiteration cap, reset at the start of each simulation. */
@@ -195,21 +191,6 @@ export function hashRandom(a, b, c) {
     x ^= x >>> 12; x = Math.imul(x, 0x297a2d39);
     x ^= x >>> 15;
     return (x >>> 0) / 4294967296;
-}
-
-/** Cut type names used by the UI and metadata. */
-export const CUT_TYPES = { thinning: 1, heading: 2, pollard: 3 };
-
-/** Add a prune cut at a node's stable bud/step identity. */
-export function addPrune(budId, birthStep, type = 'thinning') {
-    if (birthStep < 0) return;
-    prunedCuts.set(budId + ':' + birthStep, {
-        type: CUT_TYPES[type] ? type : 'thinning',
-    });
-}
-
-export function clearPrunes() {
-    prunedCuts.clear();
 }
 
 /* ==========================================================================
@@ -395,7 +376,6 @@ export function simulate() {
         axisId: i + 1, axisOrder: 0, parentAxisId: -1, segmentIndex: 0, pathLength: 0,
         dirX: 0, dirY: -1, dirZ: 0, upX: 1, upY: 0, upZ: 0, tortuosity: 0,
         budType: 0, fate: 0, birthLight: 1, birthShade: 0, mechanicalLoad: 0,
-        cutType: 0, cutStep: -1, cut: null,
         tree: i, species: treeSpecies[i] || P.speciesMix,
         light: 1, currentLight: 1, vigor: 1, shootAge: 0, preDirX: 0, preDirY: -1,
     }));
@@ -449,17 +429,6 @@ export function simulate() {
  */
 export function growBud(bud, step, lightField, buds, epoch = null) {
     if (bud.dead || step < bud.start) return;
-    const cut = prunedCuts.get(bud.id + ':' + step);
-    if (cut) {
-        const cutNode = nodes[bud.tipNode];
-        cutNode.cutType = CUT_TYPES[cut.type] || 1;
-        cutNode.cutStep = step;
-        cutNode.cut = { type: cut.type, step, radius: 1.5 };
-        cutNode.fate = 2;
-        if (cut.type !== 'thinning') spawnCutRegrowth(bud, step, cut, buds);
-        bud.dead = true;
-        return;
-    }
     if (bud.leader && step >= LEADER_STOP_STEP) { bud.dead = true; return; }
     if (nodes.length >= MAX_NODES) { bud.dead = true; return; } // hard skeleton cap
 
@@ -558,7 +527,6 @@ export function growBud(bud, step, lightField, buds, epoch = null) {
         budType: bud.budType, fate: 0,
         tree: bud.tree, species: bud.species,
         birthLight: light, birthShade: 1 - light, mechanicalLoad: 0, windStress,
-        cutType: 0, cutStep: -1, cut: null,
         light, currentLight: 0, vigor: bud.vigor, shootAge: bud.age, preDirX, preDirY,
     });
     const index = nodes.length - 1;
@@ -735,40 +703,6 @@ export function spawnReiteration(bud, step, index, dx, dy, buds) {
         leaderDepth: bud.leaderDepth,
         dead: false,
     });
-}
-
-/** Spawn wound-regrowth buds after a heading or pollard cut. */
-export function spawnCutRegrowth(bud, step, cut, buds) {
-    const rand = (channel) => hashRandom(bud.id, step, channel);
-    const count = cut.type === 'pollard' ? 3 : 1 + (rand(40) > 0.5 ? 1 : 0);
-    const order = Math.min(MAX_ORDER, bud.order + 1);
-    for (let k = 0; k < count; k++) {
-        const side = k % 2 === 0 ? 1 : -1;
-        let bx = bud.dirX * 0.35 + side * (0.55 + rand(41 + k) * 0.45);
-        let by = bud.dirY * 0.35 - (0.55 + rand(45 + k) * 0.35);
-        const bm = Math.hypot(bx, by) || 1;
-        bx /= bm; by /= bm;
-        buds.push({
-            id: (bud.id * 31 + step * 7 + 101 + k) | 0,
-            tipNode: bud.tipNode, rootNode: 0,
-            dirX: bx, dirY: by,
-            order,
-            axisId: nextAxisId++,
-            parentAxisId: nodes[bud.tipNode].axisId,
-            segmentIndex: 0,
-            pathLength: nodes[bud.tipNode].pathLength,
-            budType: 3,
-            tree: bud.tree, species: bud.species, traits: bud.traits || P,
-            vigor: 0.68 + rand(50 + k) * 0.25,
-            age: 0,
-            start: step + 1 + Math.floor(rand(55 + k) * 2),
-            life: cut.type === 'pollard' ? 5 + Math.floor(rand(60 + k) * 5) : 7 + Math.floor(rand(65 + k) * 8),
-            side,
-            leader: false,
-            leaderDepth: bud.leaderDepth,
-            dead: false,
-        });
-    }
 }
 
 /**

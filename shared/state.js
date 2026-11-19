@@ -1,14 +1,14 @@
 /**
  * Shared persistence and share-link state for both prototypes.
  *
- * Only user-facing state is stored: seed, parameters, cuts, time, season,
- * preset, visualization settings, and optional 3D camera. The skeleton is
+ * Only user-facing state is stored: seed, parameters, time, season, preset,
+ * export settings, and optional 3D camera. The skeleton is
  * always rebuilt from this state.
  */
 
 'use strict';
 
-const TREE_STATE_VERSION = 3;
+const TREE_STATE_VERSION = 4;
 const TREE_STATE_LOCAL_PREFIX = 'parametric-tree-state';
 
 /**
@@ -35,6 +35,14 @@ const TREE_STATE_MIGRATIONS = {
         if (!next.automation || typeof next.automation !== 'object') {
             next.automation = { version: 1, enabled: true, tracks: {} };
         }
+        return next;
+    },
+    3(state) {
+        const next = Object.assign({}, state);
+        next.version = 4;
+        delete next.cuts;
+        delete next.compare;
+        delete next.viz;
         return next;
     },
 };
@@ -97,15 +105,12 @@ function captureTreeState(app) {
         dimension: app.dimension,
         seed: app.seed,
         params,
-        cuts: Array.from(app.prunedCuts.entries()).map(([key, value]) => [key, value.type || 'thinning']),
         time: app.time,
         season: app.season,
         seasonAuto: !!app.seasonAuto,
         activePreset: app.activePreset,
-        viz: Object.assign({}, app.viz),
         ui: app.ui ? Object.assign({}, app.ui) : { theme: 'auto' },
         exportSettings: app.exportSettings ? Object.assign({}, app.exportSettings) : null,
-        compare: app.compare ? Object.assign({}, app.compare) : null,
         camera,
         automation: app.automation && typeof app.automation === 'object'
             ? Object.assign({}, app.automation, {

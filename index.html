@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Parametric tree — 2D / 3D split studio</title>
+    <title>Parametric tree — Grow studio</title>
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="linked.css">
     <link rel="stylesheet" href="studio.css">
@@ -58,6 +58,9 @@
             </button>
             <button id="helpButton" class="icon-button header-icon" type="button"
                 aria-label="Help and keyboard shortcuts" aria-keyshortcuts="?">?</button>
+            <button id="panelToggle" class="header-button" type="button"
+                aria-controls="controlPanel" aria-expanded="true"
+                title="Show or hide the controls">Controls</button>
             <button id="fullscreen" class="header-button" type="button" aria-pressed="false"
                 aria-keyshortcuts="F" title="Expand the acting view (F)">Fullscreen</button>
             <span id="status" class="sr-only" role="status" aria-live="polite">Loading views…</span>
@@ -66,17 +69,6 @@
     </header>
 
     <div class="app-body">
-        <nav id="modeRail" class="mode-rail" aria-label="Studio modes" role="tablist" aria-orientation="vertical">
-            <button class="mode-rail-button" type="button" data-mode="grow" role="tab" aria-keyshortcuts="Alt+1" aria-selected="true"
-                aria-controls="controlPanel" tabindex="0"><span class="mode-icon" aria-hidden="true"></span><span>Grow</span></button>
-            <button class="mode-rail-button" type="button" data-mode="sculpt" role="tab" aria-keyshortcuts="Alt+2" aria-selected="false"
-                aria-controls="controlPanel" tabindex="-1"><span class="mode-icon" aria-hidden="true"></span><span>Sculpt</span></button>
-            <button class="mode-rail-button" type="button" data-mode="study" role="tab" aria-keyshortcuts="Alt+3" aria-selected="false"
-                aria-controls="controlPanel" tabindex="-1"><span class="mode-icon" aria-hidden="true"></span><span>Study</span></button>
-            <button class="mode-rail-button" type="button" data-mode="deliver" role="tab" aria-keyshortcuts="Alt+4" aria-selected="false"
-                aria-controls="controlPanel" tabindex="-1"><span class="mode-icon" aria-hidden="true"></span><span>Deliver</span></button>
-        </nav>
-
         <div id="panelBackdrop" class="panel-backdrop" hidden></div>
 
         <aside id="controlPanel" class="control-panel" aria-labelledby="panelTitle" tabindex="-1">
@@ -85,7 +77,6 @@
                     <strong id="panelTitle">Grow</strong>
                     <span id="panelQuestion">What tree am I making?</span>
                 </div>
-                <span id="actingOnChip" class="acting-chip" hidden>Acting on: 2D</span>
                 <div class="panel-head-actions">
                     <button id="panelCollapse" class="panel-close" type="button"
                         aria-label="Collapse controls" aria-expanded="true">‹</button>
@@ -140,71 +131,7 @@
                 <button type="button" data-mobile-pane="3d" aria-pressed="false">3D</button>
             </div>
 
-            <div class="sculpt-toolbar" id="sculptToolbar" hidden>
-                <span id="sculptActingChip" class="acting-chip">Acting on: 2D</span>
-                <span class="sculpt-divider" aria-hidden="true"></span>
-                <div class="sculpt-toolbar-slot" data-slot="sculpt-toolbar"></div>
-                <span id="sculptCutCount" class="toolbar-note">0 cuts</span>
-            </div>
-
-            <div class="canvas-hint-strip" id="canvasHintStrip" hidden></div>
-
-            <aside class="anchored-inspector" id="anchoredInspector" hidden aria-label="Selected branch inspector">
-                <div class="anchored-leader" aria-hidden="true"></div>
-                <header>
-                    <strong>Selected branch</strong>
-                    <button type="button" id="anchoredClose" class="icon-button" aria-label="Close inspector">×</button>
-                </header>
-                <div id="anchoredBody" class="anchored-body">Click a branch to inspect it.</div>
-                <div class="anchored-actions">
-                    <button id="anchoredIsolate" type="button" class="secondary-button">Isolate</button>
-                    <button id="anchoredPrune" type="button" class="secondary-button">Prune this</button>
-                    <details>
-                        <summary>More</summary>
-                        <div id="anchoredMore" class="anchored-more"></div>
-                    </details>
-                </div>
-            </aside>
-
-            <div id="recordOverlay" class="record-overlay" hidden aria-hidden="true">
-                <div id="recordYear" class="record-year">Year 0</div>
-                <div id="recordTitle" class="record-title"></div>
-                <div id="recordCaption" class="record-caption"></div>
-            </div>
-            <div id="recordGuides" class="record-guides" hidden aria-hidden="true">
-                <span class="safe-frame"></span>
-                <span class="crop crop-tl"></span><span class="crop crop-tr"></span>
-                <span class="crop crop-bl"></span><span class="crop crop-br"></span>
-            </div>
         </main>
-
-        <section id="studyDrawer" class="study-drawer" aria-label="Study analytics" hidden>
-            <div id="studyResize" class="study-resize" role="separator" aria-orientation="horizontal"
-                tabindex="0" aria-label="Resize Study drawer. Use the up and down arrow keys."></div>
-            <header class="study-drawer-head">
-                <div>
-                    <strong class="study-title">Study</strong>
-                    <span id="studySourceLabel" class="study-source-label">2D</span>
-                </div>
-                <div id="metricChips" class="metric-chips" role="group" aria-label="Chart metrics"></div>
-                <div class="study-actions">
-                    <div class="source-toggle" role="group" aria-label="Chart source">
-                        <button type="button" data-source="2d">2D</button>
-                        <button type="button" data-source="3d">3D</button>
-                        <button type="button" data-source="both">Both</button>
-                    </div>
-                    <button id="studyDataToggle" type="button" class="quiet-button" aria-expanded="false">Data table</button>
-                    <button id="studyCollapse" type="button" class="quiet-button">Hide drawer</button>
-                </div>
-            </header>
-            <div class="study-chart-wrap">
-                <canvas id="studyChart" tabindex="0" role="slider" aria-label="Growth analytics over time"
-                    aria-valuemin="0" aria-valuemax="301" aria-valuenow="0" aria-valuetext="Year 0"></canvas>
-            </div>
-            <div id="studySparklines" class="study-sparklines"></div>
-            <div id="studyDataTable" class="study-data" hidden></div>
-            <p class="study-footnote">Leaf light is a final-canopy approximation. Solid line: current run. Dashed: run A.</p>
-        </section>
     </div>
 
     <footer id="transportDock" class="transport-dock" role="region" aria-label="Timeline transport">
@@ -239,7 +166,7 @@
             <div class="dock-readout">
                 <button type="button" class="readout-button" data-popover="lifespanPopover"
                     aria-haspopup="true" aria-expanded="false">Lifespan <b id="lifespanReadout">300</b></button>
-                <div id="lifespanPopover" class="popover" hidden><div data-slot="dock-lifespan"></div><p class="popover-note">Changing lifespan clears cuts.</p></div>
+                <div id="lifespanPopover" class="popover" hidden><div data-slot="dock-lifespan"></div><p class="popover-note">Changing lifespan rebuilds the tree.</p></div>
             </div>
             <div class="dock-readout">
                 <button type="button" class="readout-button" data-popover="speedPopover"
@@ -257,28 +184,6 @@
 
     <button id="fullscreenExit" class="fullscreen-exit" type="button" aria-label="Exit fullscreen">Exit fullscreen</button>
     <span id="fullscreenHint" class="fullscreen-hint">Space play/pause · R rewind · H hide UI · Esc exit</span>
-
-    <div id="recordChrome" class="record-chrome" hidden>
-        <div id="recordArmedCard" class="record-card">
-            <h2>Record stage</h2>
-            <p>Start your screen recorder, then press Start take. Hide chrome and guides while the take runs.</p>
-            <p class="record-frame-note" id="recordFrameNote">Frame 16:9</p>
-            <div class="record-card-actions">
-                <button id="recordStart" type="button" class="primary-button">Start take</button>
-                <button id="recordExit" type="button" class="quiet-button">Back to studio</button>
-            </div>
-        </div>
-        <div id="recordCountdown" class="record-countdown" hidden aria-live="off"></div>
-        <div id="recordComplete" class="record-card record-complete" hidden>
-            <h2>Take complete</h2>
-            <p>Stop your recorder. This card can be dismissed and trimmed out in editing.</p>
-            <div class="record-card-actions">
-                <button id="recordReplay" type="button" class="primary-button">Replay</button>
-                <button id="recordBack" type="button" class="quiet-button">Back to studio</button>
-            </div>
-        </div>
-        <button id="recordAbort" type="button" class="record-abort quiet-button">Exit record stage (Esc)</button>
-    </div>
 
     <div id="dialogBackdrop" class="dialog-backdrop" hidden></div>
     <div id="palette" class="dialog palette" role="dialog" aria-modal="true" aria-labelledby="paletteTitle" hidden>
@@ -298,20 +203,15 @@
         <div class="shortcut-grid">
             <span>Play / pause</span><kbd>Space</kbd>
             <span>Rewind and play</span><kbd>R</kbd>
-            <span>Prune / lasso</span><kbd>P</kbd><kbd>L</kbd>
-            <span>Isolate selected</span><kbd>I</kbd>
-            <span>Undo / redo cut</span><kbd>⌘Z</kbd><kbd>⇧⌘Z</kbd>
             <span>Acting view</span><kbd>1</kbd><kbd>2</kbd>
-            <span>Modes</span><kbd>⌥1</kbd><kbd>⌥2</kbd><kbd>⌥3</kbd><kbd>⌥4</kbd>
             <span>Command palette</span><kbd>⌘K</kbd>
             <span>Fullscreen acting view</span><kbd>F</kbd>
             <span>Hide fullscreen UI</span><kbd>H</kbd>
             <span>Exit / close</span><kbd>Esc</kbd>
         </div>
-        <p class="dialog-note">On macOS, Option+digit produces a character; the studio matches the physical key.</p>
         <div class="help-explainer">
             <h3>How it works</h3>
-            <p>The tree is simulated once as a skeleton of nodes. Time is a render parameter, so scrubbing never re-runs the simulation. Every random choice comes from a hash of the seed, bud, step and channel, so the same settings reproduce the same tree. Cuts are stored as stable <code>budId:birthStep</code> keys; pruning re-simulates light so nearby branches can respond. The 2D silhouette and 3D form share a seed, parameters, cuts and time, but use separate simulation and render engines.</p>
+            <p>The tree is simulated once as a skeleton of nodes. Time is a render parameter, so scrubbing never re-runs the simulation. Every random choice comes from a hash of the seed, bud, step and channel, so the same settings reproduce the same tree. The 2D silhouette and 3D form share a seed, parameters and time, while using separate rendering engines.</p>
         </div>
     </div>
 
@@ -321,21 +221,10 @@
             <h2 id="resetTitle">Reset app state?</h2>
             <button type="button" class="icon-button" data-close-dialog="resetDialog" aria-label="Close">×</button>
         </header>
-        <p class="dialog-note">This clears both views, cuts, the saved session, mode/layout, Record settings and view options. Onboarding will not replay. This cannot be undone.</p>
+        <p class="dialog-note">This clears both views, the saved session, layout and view options. This cannot be undone.</p>
         <div class="reset-actions">
             <button id="resetCancel" type="button" class="quiet-button">Cancel</button>
             <button id="resetConfirm" type="button" class="destructive-button">Reset app</button>
-        </div>
-    </div>
-
-    <div id="tour" class="tour" role="dialog" aria-labelledby="tourTitle" hidden>
-        <p id="tourStepLabel" class="tour-step-label">1 of 3</p>
-        <h2 id="tourTitle">Two linked views</h2>
-        <p id="tourBody">One tree, shown two ways. The 2D silhouette and the 3D form share a seed, parameters, cuts and time.</p>
-        <div class="tour-actions">
-            <button id="tourSkip" type="button" class="quiet-button">Skip</button>
-            <button id="tourBack" type="button" class="secondary-button" hidden>Back</button>
-            <button id="tourNext" type="button" class="primary-button">Next</button>
         </div>
     </div>
 

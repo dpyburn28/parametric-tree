@@ -21,7 +21,6 @@
     --radius-button: 8px;
     --radius-card: 12px;
     --radius-pill: 999px;
-    --rail-w: 72px;
     --flyout-w: 280px;
     --dock-h: 96px;
     --header-h: 52px;
@@ -388,19 +387,24 @@ kbd {
 .app-body {
     min-height: 0;
     display: grid;
-    grid-template-columns: var(--rail-w) var(--flyout-w) minmax(0, 1fr);
+    grid-template-columns: var(--flyout-w) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
     position: relative;
 }
 
-body.panel-collapsed .app-body {
-    grid-template-columns: var(--rail-w) 0 minmax(0, 1fr);
+/* The panel only occupies a grid column at desktop widths. Below 1100px it
+   becomes a fixed drawer, so the stage must keep the full-width column even
+   while the panel is collapsed. */
+@media (min-width: 1101px) {
+    body.panel-collapsed .app-body {
+        grid-template-columns: 0 minmax(0, 1fr);
+    }
 }
 
 /* ---- Stage ------------------------------------------------------------- */
 
 .app-split {
-    grid-column: 3;
+    grid-column: 2;
     grid-row: 1;
     min-width: 0;
     min-height: 0;

@@ -36,13 +36,9 @@ import {
     treeRoots,
     treeTraits,
     treeSpecies,
-    prunedCuts,
     fullBounds,
     hashRandom,
     perpBasis,
-    CUT_TYPES,
-    addPrune,
-    clearPrunes,
     sunDir,
     obstacleSpec,
     obstacleSdf,
@@ -140,7 +136,6 @@ let leafMotionActive = false;
 let motionFrame = 0;
 const perf = {
     simulate: 0,
-    analytics: 0,
     branchMesh: 0,
     branchMotion: 0,
     leafMotion: 0,
@@ -3591,10 +3586,7 @@ function updateLifespanUI() {
 function setLifespan(v) {
     P.lifespan = Math.max(10, Math.round(+v || 300));
     if (time > timeEnd()) time = timeEnd();
-    clearPrunes();
-    pruneMarks.length = 0;
     clearHover();
-    resetCutHistory();
     updateLifespanUI();
     scheduleRegenerate();
 }
@@ -3634,19 +3626,9 @@ function regenerate() {
     updateTerrain();
     updateContactShadows();
     updateGroundDetail();
-    selectedNode = -1;
     clearHover();
-    rebuildPruneMarks();
-    updateCutButtons();
-    const inspector = $('inspector');
-    if (inspector) inspector.textContent = 'Click the tree to inspect a node.';
-    updateSelectionMesh();
     rebuildRootMesh();
-    rebuildWounds();
     $('seedv').textContent = 'seed ' + seed;
-    t0 = performance.now();
-    computeAnalytics();
-    perf.analytics = performance.now() - t0;
     updateShadowCamera(fullBounds);
     updateSceneFromTime(false);
     if (!$('zoom').checked) frameCameraToBounds(fullBounds, false);
@@ -3892,10 +3874,6 @@ function buildParamControls() {
                 }
             }
             if (key !== 'speed' && key !== 'leaves') {
-                clearPrunes();
-                pruneMarks.length = 0;
-                clearHover();
-                resetCutHistory();
                 setActivePreset('custom');
             }
             if (key === 'speed') return;          // playback only
@@ -3947,10 +3925,7 @@ function applyPreset(name) {
     if ($('speciesMix')) $('speciesMix').value = 'current';
     syncParamInputs();
     setActivePreset(name);
-    clearPrunes();
-    pruneMarks.length = 0;
     clearHover();
-    resetCutHistory();
     regenerate();
     updateSeasonLabel();
 }
@@ -4414,7 +4389,6 @@ function buildGlbBlob() {
                 axis,
                 time,
                 lod: requestedLod,
-                cuts: Array.from(prunedCuts.keys()),
             };
         }
 
@@ -4665,17 +4639,11 @@ function captureAppState() {
         dimension: DIMENSION,
         seed,
         P,
-        prunedCuts,
         time,
         season,
         seasonAuto,
         automation,
         activePreset,
-        viz,
-        compare: analyticsBaseline ? {
-            enabled: analyticsCompare,
-            baseline: analyticsBaseline,
-        } : null,
         exportSettings: Object.assign({}, exportSettings),
         camera: {
             position: camera.position,
@@ -4723,10 +4691,6 @@ function postLinkedPatch(patch) {
 
 function restoreAppState(state, options = {}) {
     if (!state) return;
-    const previousSelection = selectedNode >= 0 ? nodes[selectedNode] : null;
-    const previousSelectionId = previousSelection
-        ? `${previousSelection.budId}:${previousSelection.birthStep}`
-        : null;
     if (state.dimension && state.dimension !== DIMENSION && !LINKED_MODE) {
         const url = new URL(window.location.href);
         url.searchParams.set('state', encodeTreeState(state));
@@ -4742,16 +4706,10 @@ function restoreAppState(state, options = {}) {
     setSimulationAutomation(automation);
     if ($('seasonAuto')) $('seasonAuto').checked = seasonAuto;
     activePreset = state.activePreset || 'custom';
-    if (state.viz) Object.assign(viz, state.viz);
     P.bloom = !!P.bloom;
     P.snow = !!P.snow;
 
-    prunedCuts.clear();
-    for (const [key, type] of (state.cuts || [])) {
-        prunedCuts.set(key, { type: CUT_TYPES[type] ? type : 'thinning' });
-    }
     clearHover();
-    resetCutHistory();
 
     if (state.camera && state.camera.position && state.camera.target) {
         applyCameraState(state.camera);
@@ -4763,26 +4721,7 @@ function restoreAppState(state, options = {}) {
     updateSeasonLabel();
     setActivePreset(activePreset);
     if (bloomPass) bloomPass.enabled = !!P.bloom;
-    branchMat.wireframe = !!viz.wireframe;
-    if ($('vizColor')) $('vizColor').value = viz.colorMode;
-    if ($('vizSkeleton')) $('vizSkeleton').checked = !!viz.skeleton;
-    if ($('vizLight')) $('vizLight').checked = !!viz.lightGrid;
-    if ($('vizVectors')) $('vizVectors').checked = !!viz.vectors;
-    if ($('vizShed')) $('vizShed').checked = !!viz.shed;
-    if ($('vizXray')) $('vizXray').checked = !!viz.xray;
-    if ($('vizWire')) $('vizWire').checked = !!viz.wireframe;
 
-    if (state.compare && state.compare.baseline) {
-        analyticsBaseline = Object.assign({}, state.compare.baseline, {
-            points: (state.compare.baseline.points || []).map((point) => Object.assign({}, point)),
-        });
-        analyticsCompare = !!state.compare.enabled;
-    } else {
-        analyticsBaseline = null;
-        analyticsCompare = false;
-    }
-    analyticsHover = null;
-    updateAnalyticsUI();
     if (state.exportSettings) Object.assign(exportSettings, state.exportSettings);
     syncExportSettingsUI();
 
@@ -4791,11 +4730,6 @@ function restoreAppState(state, options = {}) {
     if (state.camera && state.camera.position && state.camera.target) {
         if (!LINKED_MODE && $('zoom')) $('zoom').checked = false;
         applyCameraState(state.camera);
-    }
-    if (options.preserveSelection && previousSelectionId && selectionEnabled) {
-        const restoredIndex = nodes.findIndex((node) => `${node.budId}:${node.birthStep}` === previousSelectionId);
-        if (restoredIndex >= 0) selectNode(restoredIndex);
-        else clearSelection();
     }
     if (!options.skipAutosave) scheduleStateAutosave();
 }
@@ -4961,58 +4895,10 @@ function bindControls() {
     if (!APP_BUS && $('fullscreenExit')) $('fullscreenExit').onclick = () => setCanvasFullscreen(false);
     $('reseed').onclick = () => {
         setSeedValue(Math.floor(Math.random() * 1e9));
-        clearPrunes();
-        pruneMarks.length = 0;
-        clearHover();
-        resetCutHistory();
         regenerate();
     };
     $('reset').onclick = () => { setPlaying(false); setTime(0); };
-    if ($('prune')) $('prune').onclick = () => {
-        pruneMode = !pruneMode;
-        if (pruneMode) lassoMode = false;
-        $('prune').classList.toggle('active', pruneMode);
-        if ($('lasso')) $('lasso').classList.toggle('active', lassoMode);
-        canvas.style.cursor = (pruneMode || lassoMode) ? 'crosshair' : '';
-        if (!pruneMode) clearHover();
-    };
-    if ($('lasso')) $('lasso').onclick = () => {
-        lassoMode = !lassoMode;
-        if (lassoMode) pruneMode = false;
-        $('lasso').classList.toggle('active', lassoMode);
-        if ($('prune')) $('prune').classList.toggle('active', pruneMode);
-        canvas.style.cursor = (pruneMode || lassoMode) ? 'crosshair' : '';
-        clearHover();
-    };
-    if ($('isolate')) $('isolate').onclick = toggleIsolation;
-    if ($('snapshot')) $('snapshot').onclick = takeSnapshot3D;
-    if ($('compare')) $('compare').onclick = toggleCompare3D;
-    if ($('clearCuts')) $('clearCuts').onclick = () => {
-        if (!prunedCuts.size) return;
-        recordCutAction();
-        clearPrunes();
-        pruneMarks.length = 0;
-        clearHover();
-        regenerate();
-    };
-    if ($('undoCut')) $('undoCut').onclick = undoCut;
-    if ($('redoCut')) $('redoCut').onclick = redoCut;
     if ($('exportGlb')) $('exportGlb').onclick = exportGlb;
-    if ($('exportCsv')) $('exportCsv').onclick = exportAnalyticsCsv;
-    if ($('exportBatch')) $('exportBatch').onclick = exportBatchZip;
-    if ($('exportJson')) $('exportJson').onclick = () => downloadTextFile(
-        `parametric-tree-analytics-seed-${seed}${analyticsBaseline ? '-compare' : ''}.json`,
-        JSON.stringify(analyticsBaseline ? {
-            current: analytics,
-            baseline: analyticsBaseline,
-            comparison: analyticsComparisonRows(),
-        } : analytics, null, 2)
-    );
-    if ($('analyticsPin')) $('analyticsPin').onclick = pinAnalyticsBaseline;
-    if ($('analyticsCompare')) $('analyticsCompare').onclick = toggleAnalyticsCompare;
-    if ($('analyticsClear')) $('analyticsClear').onclick = clearAnalyticsBaseline;
-    bindAnalyticsChart();
-    updateAnalyticsUI();
     if ($('exportPng')) $('exportPng').onclick = exportPng;
     if ($('saveState')) $('saveState').onclick = exportStateJson;
     if ($('loadState')) $('loadState').onclick = () => $('loadStateFile').click();
@@ -5021,38 +4907,6 @@ function bindControls() {
         e.target.value = '';
     };
     if ($('shareState')) $('shareState').onclick = copyShareLink;
-    canvas.addEventListener('pointerdown', (e) => {
-        pointerDownPos = e.button === 0 ? { x: e.clientX, y: e.clientY } : null;
-        beginLasso3D(e);
-    });
-    canvas.addEventListener('pointermove', (e) => {
-        if (lassoActive) updateLasso3D(e);
-        else handleCanvasHover(e);
-    });
-    canvas.addEventListener('pointerleave', () => { handleCanvasLeave(); drawLassoOverlay3D(); });
-    canvas.addEventListener('pointercancel', () => { lassoActive = false; lassoPoints = []; drawLassoOverlay3D(); });
-    canvas.addEventListener('pointerup', (e) => {
-        if (lassoActive) {
-            finishLasso3D(e);
-            pointerDownPos = null;
-            return;
-        }
-        if (!pointerDownPos || e.button !== 0) {
-            pointerDownPos = null;
-            return;
-        }
-        const moved = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
-        pointerDownPos = null;
-        if (moved >= 5) return;
-        if (pruneMode) {
-            handleCanvasPrune(e);
-        } else if (selectionEnabled) {
-            const index = pickNodeAt(e);
-            if (index >= 0) selectNode(index);
-            else clearSelection();
-        }
-    });
-    canvas.addEventListener('pointercancel', () => { pointerDownPos = null; });
     $('zoom').onchange = () => {
         if ($('zoom').checked) updateSceneFromTime(false);
         else frameCameraToBounds(fullBounds, false);
@@ -5181,21 +5035,6 @@ function bindControls() {
         updateSceneFromTime(false);
         postLinkedPatch({ season, seasonAuto });
     };
-    if ($('vizColor')) $('vizColor').onchange = (e) => { viz.colorMode = e.target.value; updateSceneFromTime(false); };
-    if ($('vizSkeleton')) $('vizSkeleton').onchange = (e) => { viz.skeleton = e.target.checked; updateSceneFromTime(false); };
-    if ($('vizLight')) $('vizLight').onchange = (e) => { viz.lightGrid = e.target.checked; updateSceneFromTime(false); };
-    if ($('vizVectors')) $('vizVectors').onchange = (e) => { viz.vectors = e.target.checked; updateSceneFromTime(false); };
-    if ($('vizShed')) $('vizShed').onchange = (e) => { viz.shed = e.target.checked; updateSceneFromTime(false); };
-    if ($('vizWire')) $('vizWire').onchange = (e) => {
-        viz.wireframe = e.target.checked;
-        branchMat.wireframe = viz.wireframe;
-        updateSceneFromTime(false);
-    };
-    if ($('vizPerf')) $('vizPerf').onchange = (e) => {
-        perfHudVisible = e.target.checked;
-        updatePerfHud();
-    };
-    if ($('vizXray')) $('vizXray').onchange = (e) => { viz.xray = e.target.checked; updateSceneFromTime(false); };
     window.addEventListener('keydown', (e) => {
         if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
         if (window.__TREE_APP_BUS__) {
@@ -5229,36 +5068,6 @@ function bindControls() {
             fullscreenUiHidden = !fullscreenUiHidden;
             document.body.classList.toggle('canvas-ui-hidden', fullscreenUiHidden);
             return;
-        }
-        if (e.metaKey || e.ctrlKey) {
-            if (key === 'z') {
-                e.preventDefault();
-                if (e.shiftKey) redoCut(); else undoCut();
-            } else if (key === 'y') {
-                e.preventDefault();
-                redoCut();
-            }
-            return;
-        }
-        if (key === 'p') {
-            e.preventDefault();
-            if ($('prune')) $('prune').click();
-        } else if (key === 'l') {
-            e.preventDefault();
-            if ($('lasso')) $('lasso').click();
-        } else if (key === 'i') {
-            e.preventDefault();
-            toggleIsolation();
-        } else if (key === 'escape') {
-            lassoActive = false;
-            lassoPoints = [];
-            isolateNode = -1;
-            compareMode = false;
-            compareLines.visible = false;
-            clearHover();
-            clearSelection();
-            updateIsolation();
-            updateSceneFromTime(false);
         }
     });
     window.addEventListener('resize', resizeCanvas);
@@ -5314,7 +5123,6 @@ window.__tree3d = {
     get leafCount() { return LEAF_SPECIES.reduce((sum, species) => sum + leafMeshes[species].count, 0); },
     get branchSegments() { return branchSegmentCount; },
     get rootMeshes() { return rootMeshes.length; },
-    get analytics() { return analytics; },
     get groundDetail() {
         return {
             visible: groundDetailGroup.visible,
@@ -5334,15 +5142,8 @@ window.__tree3d = {
     captureState() { return captureAppState(); },
     restoreState(state) { restoreAppState(state, { skipAutosave: true }); },
     get frameTimeAvg() { return frameTimeAvg; },
-    get hoverNode() { return hoverNode; },
-    get undoDepth() { return cutHistory.length; },
-    get redoDepth() { return cutFuture.length; },
     setSeed(v) {
         setSeedValue(v);
-        clearPrunes();
-        pruneMarks.length = 0;
-        clearHover();
-        resetCutHistory();
         regenerate();
     },
     setPreset(name) { applyPreset(name); },
@@ -5382,27 +5183,6 @@ window.__tree3d = {
         g.drawImage(renderer.domElement, 0, 0, width, height);
         return Array.from(g.getImageData(0, 0, width, height).data);
     },
-    get selectedNode() { return selectedNode; },
-    get selectionEnabled() { return selectionEnabled; },
-    clearSelection,
-    setSelectionEnabled(enabled) {
-        selectionEnabled = !!enabled;
-        if (!selectionEnabled) clearSelection();
-    },
-    /** Screen position of a node inside the pane canvas, for the anchored inspector. */
-    nodeScreenPosition(index = selectedNode) {
-        if (index < 0 || !frame.present || !frame.present[index]) return null;
-        const rect = canvas.getBoundingClientRect();
-        if (!rect.width || !rect.height) return null;
-        const projected = new THREE.Vector3(frame.px[index], frame.py[index], frame.pz[index]).project(camera);
-        if (projected.z < -1 || projected.z > 1) return null;
-        return {
-            x: (projected.x + 1) * 0.5 * rect.width,
-            y: (-projected.y + 1) * 0.5 * rect.height,
-            width: rect.width,
-            height: rect.height,
-        };
-    },
     captureCamera() {
         return cameraSettings();
     },
@@ -5434,12 +5214,6 @@ window.__tree3d = {
         }
         return state;
     },
-    selectNode,
-    pruneSelected() {
-        if (selectedNode < 0) return false;
-        pruneNodeAt(selectedNode);
-        return true;
-    },
     leafStyleAt(i, k = 0) { return leafStyle(currentSeason(), i, k, nodes[i]); },
 };
 
@@ -5461,12 +5235,8 @@ notifySimulateEnd();
 updateTerrain();
 updateContactShadows();
 updateGroundDetail();
-rebuildPruneMarks();
-updateCutButtons();
 rebuildRootMesh();
-rebuildWounds();
 $('seedv').textContent = 'seed ' + seed;
-computeAnalytics();
 updateShadowCamera(fullBounds);
 updateLifespanUI();
 updateEnvUI();

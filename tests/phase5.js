@@ -104,7 +104,7 @@ for (const [ctx, label] of [[ctx2d, '2D'], [ctx3d, '3D']]) {
     for (const field of [
         'axisId', 'axisOrder', 'parentAxisId', 'segmentIndex', 'pathLength',
         'dirX', 'dirY', 'dirZ', 'upX', 'upY', 'upZ', 'tortuosity',
-        'budType', 'fate', 'birthLight', 'birthShade', 'mechanicalLoad', 'cut',
+        'budType', 'fate', 'birthLight', 'birthShade', 'mechanicalLoad',
     ]) {
         assert.ok(field in node, `${label} node missing ${field}`);
     }
@@ -146,29 +146,6 @@ for (const [ctx, label] of [[ctx2d, '2D'], [ctx3d, '3D']]) {
         assert.ok(count < 24000, `${label} ${name} hit the node cap (${count})`);
     }
 }
-
-// Prune response: cut metadata, regrowth for heading/pollard, exact restoration.
-function pruneTest(ctx, label) {
-    run(ctx, 'clearPrunes(); simulate();');
-    const base = run(ctx, 'nodes.length');
-    const pickIndex = run(ctx, 'nodes.findIndex((n, i) => i > 100 && n.order > 0 && n.birthStep > 10)');
-    const budId = run(ctx, `nodes[${pickIndex}].budId`);
-    const birthStep = run(ctx, `nodes[${pickIndex}].birthStep`);
-
-    for (const type of ['thinning', 'heading', 'pollard']) {
-        run(ctx, `clearPrunes(); addPrune(${budId}, ${birthStep}, '${type}'); simulate();`);
-        const cuts = json(ctx, 'nodes.filter((n) => n.cut)');
-        assert.ok(cuts.length >= 1, `${label} ${type} should mark a cut node`);
-        assert.strictEqual(cuts[0].cut.type, type, `${label} ${type} cut type must persist`);
-        if (type !== 'thinning') {
-            assert.ok(run(ctx, 'nodes.some((n) => n.budType === 3)'), `${label} ${type} should create regrowth`);
-        }
-        run(ctx, 'clearPrunes(); simulate();');
-        assert.strictEqual(run(ctx, 'nodes.length'), base, `${label} ${type} clear must restore the exact node count`);
-    }
-}
-pruneTest(ctx2d, '2D');
-pruneTest(ctx3d, '3D');
 
 for (const [ctx, dim] of [[ctx2d, 'DIMENSION_PARAMS_2D'], [ctx3d, 'DIMENSION_PARAMS_3D']]) {
     run(ctx, `Object.assign(P, BASE_PARAMS, ${dim}, { angleOrderBias: BASE_PARAMS.angleOrderBias.slice(), phenology: Object.assign({}, BASE_PARAMS.phenology) }); simulate();`);

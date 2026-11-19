@@ -2,6 +2,8 @@
 
 **Last validated:** 2026-11-14
 
+> **Historical checklist:** This covers the former four-mode release. Its Sculpt, Study, Record, analytics, and batch-export checks are no longer current. Use [grow-only-focus-plan.md](grow-only-focus-plan.md) for the active acceptance criteria and verification plan.
+
 This checklist covers the split studio and the standalone 2D/3D debug pages. Serve the project root over HTTP; the studio fetches pane templates and shared modules.
 
 ```sh

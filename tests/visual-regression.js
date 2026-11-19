@@ -24,6 +24,8 @@ const ROOT = path.join(__dirname, '..');
 const BASELINE_DIR = path.join(__dirname, 'baselines');
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const UPDATE = process.argv.includes('--update');
+const CASE_FILTER = process.env.VR_CASE;
+const DIMENSION_FILTER = process.env.VR_DIMENSION;
 const SERVER_PORT = 8766;
 const CDP_PORT = 9334;
 const GRID_W = 80;
@@ -306,7 +308,7 @@ async function capture(dimension, testCase) {
         await sleep(dimension === '3d' ? 5500 : 3000);
         const readyExpr = dimension === '3d'
             ? `typeof __tree3d !== 'undefined'`
-            : `typeof nodes !== 'undefined' && typeof analytics !== 'undefined'`;
+            : `typeof nodes !== 'undefined' && typeof P !== 'undefined'`;
         let ready = false;
         for (let i = 0; i < 40; i++) {
             ready = await session.evaluate(readyExpr);
@@ -318,7 +320,23 @@ async function capture(dimension, testCase) {
             const detail = session.errors.length ? `: ${session.errors.slice(0, 3).join(' | ')}` : '';
             throw new Error(`${dimension} ${testCase.name}: page did not initialize (${href})${detail}`);
         }
-        return await session.evaluate(sampleExpression(dimension, testCase));
+        const values = await session.evaluate(sampleExpression(dimension, testCase));
+        if (session.errors.length) {
+            throw new Error(`${dimension} ${testCase.name}: browser errors: ${session.errors.slice(0, 3).join(' | ')}`);
+        }
+        if (process.env.VR_DEBUG) {
+            console.log(`${dimension} environment: ${JSON.stringify(await session.evaluate(`({
+                theme: document.documentElement.dataset.theme,
+                sunElevation: window.P?.sunElevation,
+                solarModel: window.P?.solarModel,
+                exposure: window.P?.exposure,
+                background: getComputedStyle(document.body).backgroundColor,
+                treeNodes: window.__tree3d?.nodes?.length || window.nodes?.length,
+                branchSegments: window.__tree3d?.branchSegments,
+                leafCount: window.__tree3d?.leafCount,
+            })`))}`);
+        }
+        return values;
     } finally {
         session.close();
         await fetch(`http://127.0.0.1:${CDP_PORT}/json/close/${target.id}`).catch(() => {});
@@ -368,8 +386,8 @@ async function main() {
     let failures = 0;
 
     try {
-        for (const dimension of ['2d', '3d']) {
-            for (const testCase of CASES) {
+        for (const dimension of ['2d', '3d'].filter((item) => !DIMENSION_FILTER || item === DIMENSION_FILTER)) {
+            for (const testCase of CASES.filter((item) => !CASE_FILTER || item.name === CASE_FILTER)) {
                 const values = await capture(dimension, testCase);
                 const baselinePath = path.join(BASELINE_DIR, `${dimension}-${testCase.name}.json`);
                 if (UPDATE || !fs.existsSync(baselinePath)) {
@@ -382,13 +400,15 @@ async function main() {
                 const limit = testCase.limit ?? MAE_LIMIT;
                 if (mae > limit) {
                     failures++;
-                    console.error(`${dimension} ${testCase.name}: FAIL (MAE ${mae.toFixed(2)} > ${limit})`);
+                    const actualMean = values.reduce((sum, value) => sum + value, 0) / values.length;
+                    const baselineMean = baseline.values.reduce((sum, value) => sum + value, 0) / baseline.values.length;
+                    console.error(`${dimension} ${testCase.name}: FAIL (MAE ${mae.toFixed(2)} > ${limit}; mean ${actualMean.toFixed(1)} vs ${baselineMean.toFixed(1)})`);
                 } else {
                     console.log(`${dimension} ${testCase.name}: ok (MAE ${mae.toFixed(2)})`);
                 }
             }
         }
-        {
+        if (!CASE_FILTER) {
             const values = await captureStudio(STUDIO_CASE);
             const baselinePath = path.join(BASELINE_DIR, `studio-${STUDIO_CASE.name}.json`);
             if (UPDATE || !fs.existsSync(baselinePath)) {

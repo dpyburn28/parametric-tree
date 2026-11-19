@@ -4,6 +4,8 @@
 > **Audience:** the project AI that will implement the redesign  
 > **Status:** implemented 2026-11-14 — see `project-state.md` §0 for the closeout
 
+> **Superseded:** This document specifies the former Grow / Sculpt / Study / Deliver product. The current Grow-only scope and implementation checklist are in [grow-only-focus-plan.md](grow-only-focus-plan.md); references below to removed workflows are historical.
+
 ## 1. How to use this plan
 
 This plan turns the approved **Direction A (Stage + dock)** into an implementable spec. `project-state.md` remains the source of truth for current behavior; its §11 (redesign constraints) and §14 (acceptance criteria) apply in full. This plan is the source of truth for the new structure, behavior and build order.

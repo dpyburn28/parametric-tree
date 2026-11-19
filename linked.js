@@ -3,8 +3,8 @@
  *
  * The 2D and 3D prototypes are no longer iframes. Each simulation is an ES
  * module, each renderer is mounted into its own shadow root, and this page
- * provides one shared stage, a mode rail with one flyout, a persistent
- * transport dock and the workflow modes Grow / Sculpt / Study / Deliver.
+ * provides one shared stage, Grow controls, a persistent transport dock,
+ * and compact project utilities.
  *
  * The universal panel is still cloned from the populated 2D control surface
  * (with 3D-only controls injected), then re-parented into manifest slots.
@@ -26,14 +26,7 @@ import {
     hasSeenTour,
     UI_PREFS_KEY,
 } from './studio/prefs.js';
-import { ICONS, modeIcon } from './studio/icons.js';
-import {
-    TAKE_PRESETS,
-    sampleTake,
-    normalizeSettings,
-    takeDuration,
-    orbitPose,
-} from './studio/record-controller.js';
+import { ICONS } from './studio/icons.js';
 
 const TEMPLATES = {
     '2d': './prototype/2d-prototype.html',
@@ -61,7 +54,6 @@ const panelBackdrop = $('panelBackdrop');
 const appHeader = document.querySelector('.app-header');
 const appMain = $('appSplit');
 const transportDock = $('transportDock');
-const modeRail = $('modeRail');
 const paneElements = {
     '2d': document.querySelector('.app-pane[data-view="2d"]'),
     '3d': document.querySelector('.app-pane[data-view="3d"]'),
@@ -84,7 +76,7 @@ let panelShadow = null;
 let shadow2d = null;
 let shadow3d = null;
 let activePane = prefs.activePane;
-let mode = prefs.mode;
+let mode = 'grow';
 let layout = prefs.layout;
 let panelOpen = prefs.flyoutOpen;
 let panelReturnFocus = null;
@@ -95,26 +87,7 @@ let stateLoadWarning = '';
 let lastPreset = 'oak';
 let appStateClearing = false;
 const suspendedPanes = new Set();
-let deliverTab = 'record';
-let deliverTarget = 'svg';
-let studyOpen = prefs.studyOpen;
-let studyHeight = prefs.studyHeight;
-let studySource = '2d';
-let studyMetrics = ['biomass', 'height'];
-let studyHover = null;
-let lastInspectorSignature = '';
 let sheetState = 'peek';
-let recordState = 'idle';
-let recordSettings = Object.assign({}, prefs.record);
-let recordSnapshot = null;
-let recordStartedAt = 0;
-let recordElapsed = 0;
-let recordRAF = 0;
-let recordPaused = false;
-let recordPreviewing = false;
-let recordCameraBase = null;
-let recordCountdownTimer = 0;
-let recordReturnFocus = null;
 let performanceCheckRunning = false;
 let simStartAt = 0;
 let simEndTimer = 0;
@@ -181,45 +154,6 @@ function clamp(v, min, max) {
 
 function activeShadow() {
     return activePane === '2d' ? shadow2d : shadow3d;
-}
-
-function clearSelectionIn(dimension) {
-    const bridge = window[dimension === '3d' ? '__tree3d' : '__tree2d'];
-    bridge?.clearSelection?.();
-}
-
-function clearAllSelections() {
-    clearSelectionIn('2d');
-    clearSelectionIn('3d');
-    lastInspectorSignature = '';
-    updateAnchoredInspector();
-}
-
-function setSelectionEnabled(engine2d, engine3d) {
-    window.__tree2d?.setSelectionEnabled?.(!!engine2d);
-    window.__tree3d?.setSelectionEnabled?.(!!engine3d);
-}
-
-/** Node inspection is a Study-mode interaction; tools stay available elsewhere. */
-function applySelectionPolicy() {
-    const studying = mode === 'study';
-    if (!studying) {
-        setSelectionEnabled(false, false);
-        clearAllSelections();
-    } else {
-        // Prune/Lasso take precedence over inspection, so leave them before
-        // entering Study. Otherwise a click would cut instead of inspect.
-        for (const shadow of [shadow2d, shadow3d]) {
-            const prune = findInShadow(shadow, 'prune');
-            const lasso = findInShadow(shadow, 'lasso');
-            if (prune?.classList.contains('active')) prune.click();
-            if (lasso?.classList.contains('active')) lasso.click();
-        }
-        clearAllSelections();
-        setSelectionEnabled(true, true);
-    }
-    updateAnchoredInspector();
-    syncPanel();
 }
 
 function findInShadow(shadow, id) {
@@ -1637,7 +1571,7 @@ function wirePanelControls() {
                     for (const target of targetsFor(entry.id, false)) {
                         dispatchTarget(target, input, eventName);
                     }
-                    if (entry.id === 'lifespan') showToast('Lifespan change clears cuts', { duration: 1800 });
+                    if (entry.id === 'lifespan') showToast('Lifespan updated', { duration: 1800 });
                     if (entry.id === 'seasonAuto' || entry.id === 'season') updateDockReadouts();
                 }
                 if (entry.id === 'lifespan') {
@@ -1855,18 +1789,7 @@ function syncPanel() {
     }
 
     // Display controls and mirrors.
-    const inspectorSource = findInShadow(activeShadow(), 'inspector');
-    if (inspectorSource) {
-        const html = inspectorSource.innerHTML;
-        if (html !== lastInspectorSignature) {
-            lastInspectorSignature = html;
-            const target = mounted.get('inspector');
-            const value = target?.querySelector('.display-value') || target;
-            if (value && value.innerHTML !== html) value.innerHTML = html;
-        }
-        updateAnchoredInspector();
-    }
-    for (const id of ['analyticsBaselineLabel', 'analyticsSummary', 'seedv']) {
+    for (const id of ['seedv']) {
         const target = mounted.get(id);
         const value = target?.querySelector('.display-value') || target;
         const source = findInShadow(activeShadow(), id) || findInShadow(shadow2d, id);
@@ -1979,13 +1902,9 @@ function copyCanonicalLink() {
    ========================================================================== */
 
 function savePrefs() {
-    prefs.mode = mode;
     prefs.flyoutOpen = panelOpen;
     prefs.layout = layout;
     prefs.activePane = activePane;
-    prefs.studyOpen = studyOpen;
-    prefs.studyHeight = studyHeight;
-    prefs.record = recordSettings;
     saveUiPrefs(prefs);
 }
 
@@ -2009,25 +1928,13 @@ function updateModePanelVisibility() {
     document.body.classList.remove('mode-grow', 'mode-sculpt', 'mode-study', 'mode-deliver');
     document.body.classList.add(`mode-${mode}`);
 
-    for (const button of modeRail.querySelectorAll('[data-mode]')) {
-        const active = button.dataset.mode === mode;
-        button.setAttribute('aria-selected', String(active));
-        if (active) button.setAttribute('aria-current', 'page');
-        else button.removeAttribute('aria-current');
-        button.tabIndex = active ? 0 : -1;
-    }
-
-    applyStudyState();
     updateActingChips();
-    updateSculptChrome();
 }
 
 function setMode(nextMode, { openFlyout = true } = {}) {
     if (!STUDIO_MODES.some((item) => item.id === nextMode)) return;
     mode = nextMode;
-    if (mode === 'study') studyOpen = true;
     updateModePanelVisibility();
-    applySelectionPolicy();
     if (openFlyout) setPanelOpen(true);
     if (isPhone()) setSheetState('half');
     savePrefs();
@@ -2110,11 +2017,6 @@ function setActivePane(dimension, { silent = false } = {}) {
     syncPaneVisibility();
     window.__TREE_ACTIVE_PANE__ = activePane;
     if (!silent) {
-        if (previousPane !== activePane) {
-            clearSelectionIn(previousPane);
-            lastInspectorSignature = '';
-        }
-        updateAnchoredInspector();
         syncPanel();
     }
     if (!booting) savePrefs();
@@ -2132,34 +2034,6 @@ function updateActivePaneChrome() {
 }
 
 function updateActingChips() {
-    const chip = $('actingOnChip');
-    if (chip) {
-        const visible = ['sculpt', 'study'].includes(mode)
-            || (mode === 'deliver' && deliverTab === 'export');
-        chip.hidden = !visible;
-        chip.textContent = `Acting on: ${activePane.toUpperCase()}`;
-    }
-    const sculpt = $('sculptActingChip');
-    if (sculpt) sculpt.textContent = `Acting on: ${activePane.toUpperCase()}`;
-}
-
-function updateSculptChrome() {
-    const toolbar = $('sculptToolbar');
-    if (toolbar) toolbar.hidden = mode !== 'sculpt';
-    const hint = $('canvasHintStrip');
-    const active = activeShadow();
-    const prune = active?.querySelector('#prune')?.classList.contains('active');
-    const lasso = active?.querySelector('#lasso')?.classList.contains('active');
-    if (!prune && !lasso) {
-        if (hint) hint.hidden = true;
-        return;
-    }
-    if (hint) {
-        hint.hidden = false;
-        hint.textContent = prune
-            ? 'Prune mode · click a branch · hover to preview · Esc to exit'
-            : 'Lasso mode · drag around branch roots · Esc to exit';
-    }
 }
 
 function applyPanelState() {
@@ -2179,12 +2053,11 @@ function applyPanelState() {
     }
     if (appHeader) appHeader.inert = modal;
     if (appMain) appMain.inert = modal;
-    if (modeRail) modeRail.inert = modal;
     if (transportDock) transportDock.inert = modal;
-    const drawer = $('studyDrawer');
-    if (drawer) drawer.inert = modal;
     const collapse = $('panelCollapse');
     if (collapse) collapse.setAttribute('aria-expanded', String(panelOpen));
+    const toggle = $('panelToggle');
+    if (toggle) toggle.setAttribute('aria-expanded', String(panelOpen));
 }
 
 function setPanelOpen(nextOpen, { restoreFocus = true, returnFocus = null } = {}) {
@@ -2197,10 +2070,14 @@ function setPanelOpen(nextOpen, { restoreFocus = true, returnFocus = null } = {}
     }
     panelOpen = !!nextOpen;
     applyPanelState();
+    if (nextOpen && isPhone() && sheetState === 'peek') setSheetState('half');
+    resizeViewsSoon();
     if (panelOpen && mobile) {
         focusPanel();
     } else if (wasOpen && mobile && restoreFocus) {
-        const target = panelReturnFocus || document.querySelector(`#modeRail [data-mode="${mode}"]`);
+        const target = panelReturnFocus
+            || $('panelToggle')
+            || document.querySelector(`#modeRail [data-mode="${mode}"]`);
         panelReturnFocus = null;
         if (target && target.isConnected && typeof target.focus === 'function') {
             requestAnimationFrame(() => target.focus());
@@ -2210,7 +2087,7 @@ function setPanelOpen(nextOpen, { restoreFocus = true, returnFocus = null } = {}
 }
 
 function togglePanel() {
-    setPanelOpen(!panelOpen, { returnFocus: document.querySelector(`[data-mode="${mode}"]`) });
+    setPanelOpen(!panelOpen, { returnFocus: $('panelToggle') });
 }
 
 function panelFocusables() {
@@ -2281,6 +2158,7 @@ function setSheetState(next) {
         panelOpen = true;
     }
     applyPanelState();
+    resizeViewsSoon();
     if (next === 'full') focusPanel();
     savePrefs();
 }
@@ -2325,7 +2203,6 @@ function driveTime(nextTime, { updateState = true } = {}) {
     if (window.__tree2d && !suspendedPanes.has('2d')) window.__tree2d.setTime(transportTime);
     if (window.__tree3d && !suspendedPanes.has('3d')) window.__tree3d.setTime(transportTime);
     updateDockReadouts();
-    if (studyOpen && mode === 'study') drawStudyChart();
 }
 
 function stopPlayback({ resetButton = true } = {}) {
@@ -3030,9 +2907,6 @@ function bindStudyDrawer() {
    ========================================================================== */
 
 function fillIcons() {
-    for (const button of modeRail.querySelectorAll('[data-mode]')) {
-        button.querySelector('.mode-icon').innerHTML = modeIcon(button.dataset.mode);
-    }
     if (playButton) playButton.innerHTML = `${ICONS.play}<span>Play</span>`;
     if ($('stepBack')) $('stepBack').innerHTML = ICONS.stepBack;
     if ($('stepForward')) $('stepForward').innerHTML = ICONS.stepForward;
@@ -4119,25 +3993,15 @@ let paletteResults = [];
 let paletteIndex = 0;
 let paletteReturnFocus = null;
 const ACTION_COMMANDS = [
-    { label: 'Start take', group: 'Deliver · Record', run: () => { setMode('deliver'); deliverTab = 'record'; updateDeliverTab(); openRecordStage(); } },
-    { label: 'Preview take', group: 'Deliver · Record', run: () => { setMode('deliver'); deliverTab = 'record'; updateDeliverTab(); startRecordPreview(); } },
-    { label: 'Export SVG', group: 'Deliver · Export', run: () => { setMode('deliver'); deliverTab = 'export'; updateDeliverTab(); setDeliverTarget('svg'); findInShadow(shadow2d, 'exportSvg')?.click(); } },
-    { label: 'Export GLB', group: 'Deliver · Export', run: () => { setMode('deliver'); deliverTab = 'export'; updateDeliverTab(); setDeliverTarget('glb'); findInShadow(shadow3d, 'exportGlb')?.click(); } },
-    { label: 'Export PNG', group: 'Deliver · Export', run: () => findInShadow(activeShadow(), 'exportPng')?.click() },
-    { label: 'Export batch ZIP', group: 'Deliver · Export', run: () => findInShadow(activeShadow(), 'exportBatch')?.click() },
-    { label: 'Export analytics CSV', group: 'Deliver · Export', run: () => findInShadow(activeShadow(), 'exportCsv')?.click() },
-    { label: 'Export analytics JSON', group: 'Deliver · Export', run: () => findInShadow(activeShadow(), 'exportJson')?.click() },
+    { label: 'Export SVG', group: 'Project', run: () => findInShadow(shadow2d, 'exportSvg')?.click() },
+    { label: 'Export GLB', group: 'Project', run: () => findInShadow(shadow3d, 'exportGlb')?.click() },
+    { label: 'Export PNG', group: 'Project', run: () => findInShadow(activeShadow(), 'exportPng')?.click() },
     { label: 'Copy share link', group: 'Project', run: copyCanonicalLink },
     { label: 'Save state', group: 'Project', run: () => findInShadow(activeShadow(), 'saveState')?.click() },
     { label: 'Load state', group: 'Project', run: () => findInShadow(activeShadow(), 'loadState')?.click() },
     { label: 'New seed', group: 'Grow', run: () => findInShadow(activeShadow(), 'reseed')?.click() },
-    { label: 'Undo cut', group: 'Sculpt', run: () => findInShadow(activeShadow(), 'undoCut')?.click() },
-    { label: 'Redo cut', group: 'Sculpt', run: () => findInShadow(activeShadow(), 'redoCut')?.click() },
-    { label: 'Clear cuts', group: 'Sculpt', run: () => findInShadow(activeShadow(), 'clearCuts')?.click() },
     { label: 'Toggle fullscreen', group: 'View', run: toggleFullscreen },
-    { label: 'Show Study drawer', group: 'Study', run: () => { setMode('study'); studyOpen = true; applyStudyState(); } },
     { label: 'Keyboard shortcuts', group: 'Help', run: openShortcuts },
-    { label: 'Replay first-run tour', group: 'Help', run: () => openTour(true) },
 ];
 
 function paletteScore(text, query) {
@@ -4614,10 +4478,6 @@ const appBus = {
                 if (!appStateClearing) saveTreeStateLocal('app', message.state);
                 syncTransportFromState();
                 syncPanel();
-                if (studyOpen && mode === 'study') {
-                    drawStudyChart();
-                    renderDataTable();
-                }
             }
             const outbound = { type: 'tree-apply-state', state: message.state };
             for (const [dimension, handler] of busListeners) {
@@ -4724,34 +4584,6 @@ function bindHeaderAndRail() {
             setActivePane(button.dataset.paneActivate);
         });
     }
-    for (const button of modeRail.querySelectorAll('[data-mode]')) {
-        button.addEventListener('click', () => {
-            if (button.dataset.mode === mode) {
-                if (isPhone()) {
-                    setSheetState(sheetState === 'peek' ? 'half' : (sheetState === 'half' ? 'full' : 'peek'));
-                } else {
-                    setPanelOpen(!panelOpen);
-                }
-            } else {
-                setMode(button.dataset.mode);
-                if (isPhone()) setSheetState('half');
-            }
-        });
-        button.addEventListener('keydown', (event) => {
-            if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
-            event.preventDefault();
-            const buttons = Array.from(modeRail.querySelectorAll('[data-mode]'));
-            const index = buttons.indexOf(button);
-            let next = index;
-            if (event.key === 'ArrowDown') next = (index + 1) % buttons.length;
-            if (event.key === 'ArrowUp') next = (index - 1 + buttons.length) % buttons.length;
-            if (event.key === 'Home') next = 0;
-            if (event.key === 'End') next = buttons.length - 1;
-            buttons[next].focus();
-            setMode(buttons[next].dataset.mode);
-        });
-    }
-
     for (const [name, pane] of Object.entries(paneElements)) {
         pane?.addEventListener('click', (event) => {
             if (event.target.closest('.view-menu') || event.target.closest('.pane-link-chip')) return;
@@ -4759,7 +4591,7 @@ function bindHeaderAndRail() {
         });
     }
 
-    $('panelClose')?.addEventListener('click', () => setPanelOpen(false));
+    $('panelToggle')?.addEventListener('click', togglePanel);
     $('panelCollapse')?.addEventListener('click', () => setPanelOpen(false));
     panelBackdrop?.addEventListener('click', () => {
         if (isPhone() && sheetState !== 'full') {
@@ -4826,13 +4658,8 @@ function bindHeaderAndRail() {
         if (mobile !== panelWasMobile) {
             panelWasMobile = mobile;
             applyPanelState();
+            resizeViewsSoon();
         }
-        if (studyOpen && mode === 'study') drawStudyChart();
-        if (recordState !== 'idle') {
-            document.body.style.setProperty('--record-aspect', recordAspect().toFixed(4));
-            updateRecordFrameNote();
-        }
-        updatePreflight();
     });
 }
 
@@ -4874,13 +4701,6 @@ function bindKeys() {
         const meta = event.metaKey || event.ctrlKey;
         const activeTag = event.target?.tagName;
 
-        // Mode shortcuts use the physical key so Option+digit works on macOS.
-        if (event.altKey && !meta && /^Digit[1-4]$/.test(event.code)) {
-            event.preventDefault();
-            const nextMode = STUDIO_MODES[Number(event.code.slice(5)) - 1];
-            if (nextMode) setMode(nextMode.id);
-            return;
-        }
         if (meta && event.code === 'KeyK') {
             event.preventDefault();
             openPalette();
@@ -4895,14 +4715,6 @@ function bindKeys() {
             if (!$('palette')?.hidden) { closePalette(); return; }
             if (!$('shortcutsDialog')?.hidden) { closeShortcuts(); return; }
             if (!$('resetDialog')?.hidden) { closeResetDialog(); return; }
-            if (!$('tour')?.hidden) { closeTour(); return; }
-            if (recordState !== 'idle') { exitRecordStage(); return; }
-            if (mode === 'study' && (window[activePane === '2d' ? '__tree2d' : '__tree3d']?.selectedNode ?? -1) >= 0) {
-                clearSelectionIn(activePane);
-                updateAnchoredInspector();
-                syncPanel();
-                return;
-            }
             if (fullscreenPane) { exitFullscreen(); return; }
             if (panelOpen && isPhone()) {
                 if (sheetState === 'full') setSheetState('half');
@@ -4910,11 +4722,6 @@ function bindKeys() {
                 return;
             }
             if (panelOpen && isDrawerMobile()) { setPanelOpen(false); return; }
-            return;
-        }
-        if (recordState === 'running' && event.code === 'Space') {
-            event.preventDefault();
-            pauseRecordTake();
             return;
         }
         if (event.code === 'Space') {
@@ -4958,9 +4765,6 @@ async function boot() {
     document.body.classList.add(`layout-${layout}`, `mode-${mode}`);
     document.body.classList.toggle('panel-open', panelOpen);
     document.body.classList.toggle('panel-collapsed', !panelOpen);
-    if (isPhone() && window.innerHeight > window.innerWidth && recordSettings.frame === '16:9') {
-        recordSettings.frame = '9:16';
-    }
     if (isPhone()) {
         panelOpen = true;
         document.body.classList.add('panel-open', 'sheet', 'sheet-peek');
@@ -5004,7 +4808,6 @@ async function boot() {
         })();
 
         canonical = shared;
-        studySource = activePane === '3d' ? '3d' : '2d';
         if (window.__tree2d) window.__tree2d.restoreState(shared);
         if (window.__tree3d) window.__tree3d.restoreState(shared);
         saveTreeStateLocal('app', shared);
@@ -5015,35 +4818,22 @@ async function boot() {
         setActivePane(activePane, { silent: true });
         setLayout(layout, { fromUser: false });
         updateModePanelVisibility();
-        applySelectionPolicy();
-        buildSculptToolbar();
         buildViewMenuProxies();
         buildCameraMenu();
         applyAutoZoomPrefs();
-        bindAnchoredInspector();
-        bindRecordChrome();
-        bindStudyDrawer();
         bindDock();
         bindHeaderAndRail();
         bindProjectMenu();
         bindDialogs();
         bindKeys();
-        updateDeliverTab();
-        setDeliverTarget(deliverTarget, { switchPane: false });
-        updatePreflight();
-        updateRecordGuides();
         updateScrubDecor();
         updatePlayButton();
-        applyStudyState();
 
         booting = false;
         window.__TREE_APP_BOOTING__ = false;
         document.body.classList.remove('booting');
         setStatus(stateLoadWarning || 'Synced');
 
-        if (!new URLSearchParams(window.location.search).has('test') && !hasSeenTour()) {
-            setTimeout(() => openTour(false), 900);
-        }
     } catch (error) {
         console.error(error);
         document.body.classList.remove('booting');
@@ -5058,26 +4848,16 @@ window.__TREE_STUDIO__ = {
     get mode() { return mode; },
     get layout() { return layout; },
     get activePane() { return activePane; },
-    get recordState() { return recordState; },
-    get recordSettings() { return recordSettings; },
-    get studySource() { return studySource; },
-    setMode,
     setLayout,
     setActivePane,
     focusControl: (key) => focusControl(MANIFEST_BY_KEY.get(key)),
     openPalette,
     openShortcuts,
-    openTour,
-    setDeliverTarget,
     setSheetState,
-    captureRecordSnapshot,
-    restoreRecordSnapshot,
     clearStoredAppState,
     openResetDialog,
     closeResetDialog,
     resetAppState,
-    clearAllSelections,
-    applySelectionPolicy,
 };
 
 boot();

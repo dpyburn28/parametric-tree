@@ -1,9 +1,11 @@
 # Parametric Tree — Current Product State and UI/UX Redesign Handoff
 
-**Snapshot:** 2026-11-14
-**Status:** Stage + dock UI/UX redesign implemented; validation passing
+**Snapshot:** 2026-11-18
+**Status:** Grow-only refocus; see [grow-only-focus-plan.md](grow-only-focus-plan.md)
 **Primary entry point:** `index.html` — the 2D/3D split studio  
 **Standalone debug pages:** `prototype/2d-prototype.html`, `3d-prototype/3d-prototype.html`
+
+> **Current product scope:** Grow is the only workflow. The app focuses on procedural tree generation, the shared timeline, and 2D/3D views. Save/load, share links, and direct SVG/PNG/GLB export remain. Sculpting, statistical analysis, recording, batch export, and analytics exports are removed. The detailed sections below document the previous four-mode design and are historical reference, not current behavior.
 
 > **How to use this document**
 >
@@ -15,13 +17,13 @@
 
 ---
 
-## 0. One-paragraph orientation
+## 0. Historical one-paragraph orientation
 
-Parametric Tree is a browser-based procedural tree studio. A deterministic simulation grows a tree skeleton from a seed and a set of botanical/environmental parameters. Time is a scrubbable render dimension: the user can move from seed to a 300-year-old tree without re-running the simulation. Two renderers interpret the same idea: a clean, stylized **2D silhouette** on a Canvas 2D surface, and a richer, atmospheric **3D form** built with Three.js. The split studio places both side by side, gives them one shared transport and one universal control rail, and keeps their state synchronized. The product is already deep: species grammars, forests, solar/wind/light models, pruning, branch isolation, ghost comparison, analytics comparison, versioned persistence, share links, SVG/GLB/PNG/CSV/JSON/ZIP export, keyboard support, reduced motion, and a mobile drawer. The current UI, however, still reads like a powerful prototype: it is dense, flat in hierarchy, and organized around implementation categories rather than user workflows.
+The former product combined procedural growing with sculpting, analytics, recording, and multi-format delivery. This description is retained as historical design context; the current Grow-only product scope is stated above.
 
 ---
 
-## 0. Redesign closeout (2026-11-14)
+## 0. Historical four-mode redesign closeout (2026-11-14)
 
 The **Stage + dock** redesign in [`ui-ux-redesign-plan.md`](ui-ux-redesign-plan.md) is implemented in the studio:
 

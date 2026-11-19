@@ -23,8 +23,7 @@
         <!-- ? Main 3D Render -->
         <div class="viewport">
             <canvas id="c" role="img" aria-label="3D tree model" aria-describedby="canvasHelp"></canvas> <!-- ! WebGL Canvas -->
-            <canvas id="lassoOverlay" class="lasso-overlay" aria-hidden="true"></canvas>
-            <p id="canvasHelp" class="sr-only">Drag to orbit and scroll to zoom. Use prune or lasso mode to cut branches.</p>
+            <p id="canvasHelp" class="sr-only">Drag to orbit and scroll to zoom.</p>
             <div class="legend" id="legend" hidden></div>
             <div id="perfHud" class="perf-hud" hidden></div>
             <span class="hint" aria-hidden="true">Drag to orbit · Scroll to zoom</span>
@@ -42,7 +41,6 @@
             </span>
             <span id="st1"></span>
         </div>
-        <canvas id="analytics" class="analytics" height="140" role="img" aria-label="Growth analytics"></canvas>
     </div>
     <div class="wrap" id="controls" tabindex="-1">
         <!-- ? Species & Season Controls -->
@@ -216,30 +214,12 @@
             <!-- ? Seed/Reset Controls -->
             <button id="reseed">New seed</button> <!-- ! Reseed Button -->
             <button id="reset">Reset</button> <!-- ! Reset Button -->
-            <button id="prune">Prune</button> <!-- ! Prune Mode -->
-            <button id="lasso">Lasso</button> <!-- ! Lasso Prune -->
-            <label class="viz-select" style="margin:0">
-                Cut
-                <select id="pruneType">
-                    <option value="thinning">Thinning</option>
-                    <option value="heading">Heading</option>
-                    <option value="pollard">Pollard</option>
-                </select>
-            </label>
-            <button id="clearCuts">Clear cuts</button> <!-- ! Clear Prunes -->
-            <button id="undoCut">Undo cut</button> <!-- ! Undo Prune -->
-            <button id="redoCut">Redo cut</button> <!-- ! Redo Prune -->
-            <button id="isolate">Isolate selected</button> <!-- ! Isolate Branch -->
-            <button id="snapshot">Snapshot</button> <!-- ! Before Snapshot -->
-            <button id="compare">Compare</button> <!-- ! Compare Ghost -->
             <button id="exportGlb">Export GLB</button> <!-- ! GLB Export -->
-            <button id="exportCsv">Export CSV</button> <!-- ! Analytics CSV -->
             <button id="saveState">Save state</button>
             <button id="loadState">Load state</button>
             <input type="file" id="loadStateFile" accept="application/json" hidden>
             <button id="shareState">Copy link</button>
             <button id="exportPng">Export PNG</button>
-            <button id="exportJson">Export JSON</button>
             <label style="display:flex;gap:6px;align-items:center">
                 <!-- ? Auto-Zoom Toggle -->
                 <input type="checkbox" id="zoom" checked style="width:auto;margin:0">
@@ -254,94 +234,15 @@
         </div>
 
         <details class="advanced-env">
-            <summary>Export options</summary>
-            <div class="env-bar">
-                <label class="season-auto"><input type="checkbox" id="glbRoots" checked> GLB roots</label>
-                <label class="season-auto"><input type="checkbox" id="glbLeaves" checked> GLB leaves/flowers</label>
-                <label class="season-auto"><input type="checkbox" id="glbMetadata" checked> GLB metadata</label>
-                <label class="viz-select">Axis
-                    <select id="glbAxis">
-                        <option value="y">Y-up</option>
-                        <option value="z">Z-up</option>
-                    </select>
-                </label>
-                <label class="viz-select">Units
-                    <select id="glbUnits">
-                        <option value="m" selected>metres</option>
-                        <option value="cm">centimetres</option>
-                    </select>
-                </label>
-                <label class="viz-select">PNG scale
-                    <select id="pngScale">
-                        <option value="1">1×</option>
-                        <option value="2" selected>2×</option>
-                        <option value="4">4×</option>
-                    </select>
-                </label>
-                <label class="viz-select">GLB detail
-                    <select id="glbLod">
-                        <option value="near" selected>Full</option>
-                        <option value="mid">Light</option>
-                        <option value="far">Silhouette</option>
-                    </select>
-                </label>
-                <button id="exportBatch">Export batch ZIP</button>
-            </div>
-        </details>
-
-        <details class="advanced-env">
-            <summary>Analytics comparison</summary>
-            <div class="env-bar">
-                <button id="analyticsPin">Pin baseline</button>
-                <button id="analyticsCompare" aria-pressed="false" disabled>Compare</button>
-                <button id="analyticsClear" disabled>Clear</button>
-                <span id="analyticsBaselineLabel" class="analytics-baseline-label">No baseline</span>
-            </div>
-            <p id="analyticsSummary" class="analytics-summary">Pin a run to compare metrics.</p>
-        </details>
-
-        <details class="advanced-env">
             <summary>Keyboard help</summary>
             <ul>
-                <li><b>Cmd/Ctrl+Z</b> — undo cut</li>
-                <li><b>Cmd/Ctrl+Shift+Z</b> or <b>Ctrl+Y</b> — redo cut</li>
-                <li><b>Prune mode</b> — click to cut; hover to preview the subtree</li>
-                <li><b>P</b> — prune mode</li>
-                <li><b>L</b> — lasso mode</li>
-                <li><b>I</b> — isolate selected branch</li>
                 <li><b>Space</b> — play / pause</li>
                 <li><b>R</b> — restart timeline</li>
                 <li><b>H</b> — hide/show UI in fullscreen</li>
                 <li><b>F</b> — fullscreen canvas</li>
-                <li><b>Esc</b> — exit fullscreen / clear lasso / isolation / compare</li>
+                <li><b>Esc</b> — exit fullscreen</li>
             </ul>
         </details>
-
-        <h2>Algorithm visualizations</h2>
-        <div class="viz-bar">
-            <label class="viz-select">
-                Bark color mode
-                <select id="vizColor">
-                    <option value="natural">Natural bark</option>
-                    <option value="order">Branch order (0–4)</option>
-                    <option value="light">Light level (0–1)</option>
-                    <option value="vigor">Vigor (apical dominance)</option>
-                    <option value="pipe">Pipe model vs. Age floor</option>
-                </select>
-            </label>
-            <div class="viz-checks">
-                <label><input type="checkbox" id="vizSkeleton"> Skeleton &amp; nodes</label>
-                <label><input type="checkbox" id="vizLight"> Light voxels</label>
-                <label><input type="checkbox" id="vizVectors"> Tropism vectors</label>
-                <label><input type="checkbox" id="vizShed"> Shed branches (ghosts)</label>
-                <label><input type="checkbox" id="vizWire"> Branch wireframe</label>
-                <label><input type="checkbox" id="vizPerf"> Performance HUD</label>
-                <label><input type="checkbox" id="vizXray"> X-ray (dim bark &amp; leaves)</label>
-            </div>
-        </div>
-
-        <h2>Node inspector</h2>
-        <div id="inspector" class="inspector">Click the tree to inspect a node.</div>
 
         <h2>How it works (3D)</h2>
         <ul>

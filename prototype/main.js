@@ -27,12 +27,8 @@ import {
     rootSystem,
     treeRoots,
     treeTraits,
-    prunedCuts,
     fullBounds,
     hashRandom,
-    CUT_TYPES,
-    addPrune,
-    clearPrunes,
     obstacleSpec,
     LightField,
     simulate,
@@ -2072,17 +2068,11 @@ function captureAppState() {
         dimension: DIMENSION,
         seed,
         P,
-        prunedCuts,
         time,
         season,
         seasonAuto,
         automation,
         activePreset,
-        viz,
-        compare: analyticsBaseline ? {
-            enabled: analyticsCompare,
-            baseline: analyticsBaseline,
-        } : null,
         exportSettings: Object.assign({}, exportSettings),
         camera: null,
     });
@@ -2121,10 +2111,6 @@ function postLinkedPatch(patch) {
 
 function restoreAppState(state, options = {}) {
     if (!state) return;
-    const previousSelection = selectedNode >= 0 ? nodes[selectedNode] : null;
-    const previousSelectionId = previousSelection
-        ? `${previousSelection.budId}:${previousSelection.birthStep}`
-        : null;
     if (state.dimension && state.dimension !== DIMENSION && !LINKED_MODE) {
         const url = new URL(window.location.href);
         url.searchParams.set('state', encodeTreeState(state));
@@ -2140,34 +2126,11 @@ function restoreAppState(state, options = {}) {
     setSimulationAutomation(automation);
     if ($('seasonAuto')) $('seasonAuto').checked = seasonAuto;
     activePreset = state.activePreset || 'custom';
-    if (state.viz) Object.assign(viz, state.viz);
-    if ($('vizColor')) $('vizColor').value = viz.colorMode;
-    if ($('vizSkeleton')) $('vizSkeleton').checked = !!viz.skeleton;
-    if ($('vizLight')) $('vizLight').checked = !!viz.lightGrid;
-    if ($('vizVectors')) $('vizVectors').checked = !!viz.vectors;
-    if ($('vizShed')) $('vizShed').checked = !!viz.shed;
-    if ($('vizXray')) $('vizXray').checked = !!viz.xray;
 
-    if (state.compare && state.compare.baseline) {
-        analyticsBaseline = Object.assign({}, state.compare.baseline, {
-            points: (state.compare.baseline.points || []).map((point) => Object.assign({}, point)),
-        });
-        analyticsCompare = !!state.compare.enabled;
-    } else {
-        analyticsBaseline = null;
-        analyticsCompare = false;
-    }
-    analyticsHover = null;
-    updateAnalyticsUI();
     if (state.exportSettings) Object.assign(exportSettings, state.exportSettings);
     syncExportSettingsUI();
 
-    prunedCuts.clear();
-    for (const [key, type] of (state.cuts || [])) {
-        prunedCuts.set(key, { type: CUT_TYPES[type] ? type : 'thinning' });
-    }
     clearHover();
-    resetCutHistory();
 
     syncParamInputs();
     updateEnvUI();
@@ -2176,11 +2139,6 @@ function restoreAppState(state, options = {}) {
     setActivePreset(activePreset);
     $('seedv').textContent = 'seed ' + seed;
     regenerate();
-    if (options.preserveSelection && previousSelectionId && selectionEnabled) {
-        const restoredIndex = nodes.findIndex((node) => `${node.budId}:${node.birthStep}` === previousSelectionId);
-        if (restoredIndex >= 0) selectNode(restoredIndex);
-        else clearSelection();
-    }
     if (!options.skipAutosave) scheduleStateAutosave();
 }
 
@@ -2353,10 +2311,7 @@ function updateLifespanUI() {
 function setLifespan(v) {
     P.lifespan = Math.max(10, Math.round(+v || 300));
     if (time > timeEnd()) time = timeEnd();
-    clearPrunes();
-    pruneMarks.length = 0;
     clearHover();
-    resetCutHistory();
     updateLifespanUI();
     scheduleRegenerate();
 }
@@ -2391,15 +2346,7 @@ function regenerate() {
     } finally {
         notifySimulateEnd();
     }
-    selectedNode = -1;
-    isolateNode = -1;
-    clearHover();
-    rebuildPruneMarks();
-    updateCutButtons();
-    const inspector = $('inspector');
-    if (inspector) inspector.textContent = 'Click the tree to inspect a node.';
     $('seedv').textContent = 'seed ' + seed;
-    computeAnalytics();
     draw();
 }
 
@@ -2587,10 +2534,6 @@ function buildParamControls() {
                 }
             }
             if (key !== 'speed' && key !== 'leaves') {
-                clearPrunes();
-                pruneMarks.length = 0;
-                clearHover();
-                resetCutHistory();
                 setActivePreset('custom');
             }
             if (key === 'speed') return;          // playback only
@@ -2642,10 +2585,7 @@ function applyPreset(name) {
     if ($('speciesMix')) $('speciesMix').value = 'current';
     syncParamInputs();
     setActivePreset(name);
-    clearPrunes();
-    pruneMarks.length = 0;
     clearHover();
-    resetCutHistory();
     regenerate();
     updateSeasonLabel();
 }
@@ -2842,59 +2782,10 @@ function bindControls() {
     if (!APP_BUS && $('fullscreenExit')) $('fullscreenExit').onclick = () => setCanvasFullscreen(false);
     $('reseed').onclick = () => {
         setSeedValue(Math.floor(Math.random() * 1e9));
-        clearPrunes();
-        pruneMarks.length = 0;
-        clearHover();
-        resetCutHistory();
         regenerate();
     };
     $('reset').onclick = () => { setPlaying(false); setTime(0); };
-    if ($('prune')) $('prune').onclick = () => {
-        pruneMode = !pruneMode;
-        if (pruneMode) lassoMode = false;
-        $('prune').classList.toggle('active', pruneMode);
-        if ($('lasso')) $('lasso').classList.toggle('active', lassoMode);
-        canvas.style.cursor = (pruneMode || lassoMode) ? 'crosshair' : '';
-        if (!pruneMode) { clearHover(); draw(); }
-    };
-    if ($('lasso')) $('lasso').onclick = () => {
-        lassoMode = !lassoMode;
-        if (lassoMode) pruneMode = false;
-        $('lasso').classList.toggle('active', lassoMode);
-        if ($('prune')) $('prune').classList.toggle('active', pruneMode);
-        canvas.style.cursor = (pruneMode || lassoMode) ? 'crosshair' : '';
-        clearHover();
-        draw();
-    };
-    if ($('isolate')) $('isolate').onclick = toggleIsolation;
-    if ($('snapshot')) $('snapshot').onclick = takeSnapshot2D;
-    if ($('compare')) $('compare').onclick = toggleCompare2D;
-    if ($('clearCuts')) $('clearCuts').onclick = () => {
-        if (!prunedCuts.size) return;
-        recordCutAction();
-        clearPrunes();
-        pruneMarks.length = 0;
-        clearHover();
-        regenerate();
-    };
-    if ($('undoCut')) $('undoCut').onclick = undoCut;
-    if ($('redoCut')) $('redoCut').onclick = redoCut;
     if ($('exportSvg')) $('exportSvg').onclick = exportSvg;
-    if ($('exportCsv')) $('exportCsv').onclick = exportAnalyticsCsv;
-    if ($('exportBatch')) $('exportBatch').onclick = exportBatchZip;
-    if ($('exportJson')) $('exportJson').onclick = () => downloadTextFile(
-        `parametric-tree-analytics-seed-${seed}${analyticsBaseline ? '-compare' : ''}.json`,
-        JSON.stringify(analyticsBaseline ? {
-            current: analytics,
-            baseline: analyticsBaseline,
-            comparison: analyticsComparisonRows(),
-        } : analytics, null, 2)
-    );
-    if ($('analyticsPin')) $('analyticsPin').onclick = pinAnalyticsBaseline;
-    if ($('analyticsCompare')) $('analyticsCompare').onclick = toggleAnalyticsCompare;
-    if ($('analyticsClear')) $('analyticsClear').onclick = clearAnalyticsBaseline;
-    bindAnalyticsChart();
-    updateAnalyticsUI();
     if ($('exportPng')) $('exportPng').onclick = exportPng;
     if ($('saveState')) $('saveState').onclick = exportStateJson;
     if ($('loadState')) $('loadState').onclick = () => $('loadStateFile').click();
@@ -2903,13 +2794,6 @@ function bindControls() {
         e.target.value = '';
     };
     if ($('shareState')) $('shareState').onclick = copyShareLink;
-    canvas.addEventListener('click', handleCanvasClick);
-    canvas.addEventListener('mousemove', handleCanvasHover);
-    canvas.addEventListener('mouseleave', handleCanvasLeave);
-    canvas.addEventListener('pointerdown', beginLasso);
-    canvas.addEventListener('pointermove', updateLasso);
-    canvas.addEventListener('pointerup', finishLasso);
-    canvas.addEventListener('pointercancel', () => { lassoActive = false; lassoPoints = []; draw(); });
     $('zoom').onchange = draw;
     if ($('lifespan')) $('lifespan').oninput = (e) => setLifespan(+e.target.value);
     if ($('sunAngle')) $('sunAngle').oninput = (e) => {
@@ -3002,12 +2886,6 @@ function bindControls() {
         draw();
         postLinkedPatch({ season, seasonAuto });
     };
-    if ($('vizColor')) $('vizColor').onchange = (e) => { viz.colorMode = e.target.value; draw(); };
-    if ($('vizSkeleton')) $('vizSkeleton').onchange = (e) => { viz.skeleton = e.target.checked; draw(); };
-    if ($('vizLight')) $('vizLight').onchange = (e) => { viz.lightGrid = e.target.checked; draw(); };
-    if ($('vizVectors')) $('vizVectors').onchange = (e) => { viz.vectors = e.target.checked; draw(); };
-    if ($('vizShed')) $('vizShed').onchange = (e) => { viz.shed = e.target.checked; draw(); };
-    if ($('vizXray')) $('vizXray').onchange = (e) => { viz.xray = e.target.checked; draw(); };
     window.addEventListener('keydown', (e) => {
         if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
         if (window.__TREE_APP_BUS__) {
@@ -3042,34 +2920,6 @@ function bindControls() {
             document.body.classList.toggle('canvas-ui-hidden', fullscreenUiHidden);
             return;
         }
-        if (e.metaKey || e.ctrlKey) {
-            if (key === 'z') {
-                e.preventDefault();
-                if (e.shiftKey) redoCut(); else undoCut();
-            } else if (key === 'y') {
-                e.preventDefault();
-                redoCut();
-            }
-            return;
-        }
-        if (key === 'p') {
-            e.preventDefault();
-            if ($('prune')) $('prune').click();
-        } else if (key === 'l') {
-            e.preventDefault();
-            if ($('lasso')) $('lasso').click();
-        } else if (key === 'i') {
-            e.preventDefault();
-            toggleIsolation();
-        } else if (key === 'escape') {
-            lassoActive = false;
-            lassoPoints = [];
-            isolateNode = -1;
-            compareMode = false;
-            clearHover();
-            clearSelection();
-            draw();
-        }
     });
     window.addEventListener('resize', resizeCanvas);
     decorateEnvAutomation();
@@ -3097,7 +2947,6 @@ if (!APP_BUS) {
     Object.defineProperties(window, {
         P: { get: () => P, configurable: true },
         nodes: { get: () => nodes, configurable: true },
-        analytics: { get: () => analytics, configurable: true },
         seed: { get: () => seed, set: (value) => setSeedValue(value), configurable: true },
         time: { get: () => time, set: (value) => { time = value; }, configurable: true },
         season: { get: () => season, set: (value) => { season = value; }, configurable: true },
@@ -3111,16 +2960,11 @@ window.__tree2d = {
     get rootSystem() { return rootSystem; },
     get time() { return time; },
     get season() { return season; },
-    get analytics() { return analytics; },
     get seed() { return seed; },
     captureState() { return captureAppState(); },
     restoreState(state) { restoreAppState(state, { skipAutosave: true }); },
     setSeed(v) {
         setSeedValue(v);
-        clearPrunes();
-        pruneMarks.length = 0;
-        clearHover();
-        resetCutHistory();
         regenerate();
     },
     setPreset(name) { applyPreset(name); },
@@ -3167,36 +3011,6 @@ window.__tree2d = {
         }
         return state;
     },
-    get selectedNode() { return selectedNode; },
-    get selectionEnabled() { return selectionEnabled; },
-    clearSelection,
-    setSelectionEnabled(enabled) {
-        selectionEnabled = !!enabled;
-        if (!selectionEnabled) clearSelection();
-    },
-    /** Screen position of a node inside the pane canvas, for the anchored inspector. */
-    nodeScreenPosition(index = selectedNode) {
-        if (index < 0 || !lastCamera || !frame.present[index]) return null;
-        return {
-            x: lastCamera.toX(frame.px[index]),
-            y: lastCamera.toY(frame.py[index]),
-            width: canvas.clientWidth,
-            height: canvas.clientHeight,
-        };
-    },
-    selectNode,
-    pruneSelected() {
-        if (selectedNode < 0) return false;
-        const node = nodes[selectedNode];
-        if (!node || node.parent < 0) return false;
-        const pruneType = $('pruneType') ? $('pruneType').value : 'thinning';
-        recordCutAction();
-        addPrune(node.budId, node.birthStep, pruneType);
-        selectedNode = -1;
-        clearHover();
-        regenerate();
-        return true;
-    },
 };
 
 /* ==========================================================================
@@ -3211,10 +3025,7 @@ updateDayNight();
 notifySimulateStart();
 simulate();
 notifySimulateEnd();
-rebuildPruneMarks();
-updateCutButtons();
 $('seedv').textContent = 'seed ' + seed;
-computeAnalytics();
 updateLifespanUI();
 updateEnvUI();
 updateSeasonLabel();
